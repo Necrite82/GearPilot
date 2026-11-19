@@ -391,6 +391,9 @@ local de = {
     ["enough for level %d + %d %%"] = "reicht bis Stufe %d + %d %%", ["flight point: "] = "Flugpunkt: ", ["then: "] = "danach: ",
     ["Quest route: the quests worth most at your level (experience plus the upgrade value of their rewards) in the zone that pays most for the way there, in an order: accept, objectives, turn in, nearest first. Go sets the waypoint to the next step and moves on by itself; the route follows your level and shows the next zone when this one runs dry."] =
         "Questroute: die lohnendsten Quests auf deiner Stufe (Erfahrung plus Upgrade-Wert der Belohnungen) im Gebiet, das sich mit dem Weg dorthin am meisten lohnt, in einer Reihenfolge: annehmen, Ziele, abgeben, das Nächste zuerst. „Los“ setzt den Wegpunkt zum nächsten Schritt und rückt von selbst weiter; die Route folgt deiner Stufe und zeigt das nächste Gebiet, wenn dieses ausgeschöpft ist.",
+    -- 1.3.1
+    ["(chain)"] = "(Reihe)", ["Gear on the way"] = "Ausrüstung auf dem Weg", ["from the follow-up quest "] = "aus der Folgequest ",
+    ["reward of this quest"] = "Belohnung dieser Quest",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

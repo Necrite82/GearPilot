@@ -423,7 +423,7 @@ actionPill({ "route" }, "Route", 90, {
                 if uiMap and x then
                     points[#points + 1] = { uiMap = uiMap, x = x, y = y, label = tostring(i), questID = t.kind == "accept" and t.quest.id or nil,
                         kind = t.kind == "accept" and "quest" or t.kind == "turnin" and "active" or "done",
-                        title = t.quest.title, sub = GP.QuestRoute.TaskText(t) }
+                        title = GP.QuestRoute.Title(t.quest), sub = GP.QuestRoute.TaskText(t) }
                 end
             end
         end
@@ -1662,8 +1662,9 @@ local function showRouteTask(data, profile, equipped)
         return
     end
     local t, q = data.task, data.task.quest
+    local title = QR.Title(q)
     showHead(t.kind == "accept" and "Interface\\GossipFrame\\AvailableQuestIcon" or "Interface\\GossipFrame\\ActiveQuestIcon",
-        q.title or ("#" .. q.id), QR.TaskText(t) .. (q.zoneName and (" · " .. q.zoneName) or ""))
+        title, QR.TaskText(t) .. (q.zoneName and (" · " .. q.zoneName) or ""))
     local width = (U.detail:GetWidth() or 300) - 24
     S.Metrics(U.detail, {
         { label = L("Experience"), value = q.xp > 0 and GP.QuestXP.Text(q.xp) or "-", color = C.gold, emphasis = true },
@@ -1680,11 +1681,18 @@ local function showRouteTask(data, profile, equipped)
         detailLine("GameFontDisableSmall", L("The route moves on when the quest is complete or when you reach this place."), C.muted)
     end
     actions({ L("Waypoint"), function()
-        if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, q.title, QR.TaskText(t)) end
+        if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, title, QR.TaskText(t)) end
     end, 140 }, { L("Map"), function()
-        if uiMap and x then GP.Map.Show(q.title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
-            title = q.title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil } }) end
+        if uiMap and x then GP.Map.Show(title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
+            title = title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil } }) end
     end, 90 })
+    -- The gear on the way: this quest's reward or the one at the end of its chain.
+    if q.reward and (q.gain or 0) > 0 then
+        section(L("Gear on the way"))
+        local via = q.rewardQuest and (L("from the follow-up quest ") .. GP.Sources.QuestTitle(q.rewardQuest, ForeverDB and ForeverDB.quest[q.rewardQuest]
+            and ForeverDB.quest[q.rewardQuest][1] or ("#" .. q.rewardQuest))) or L("reward of this quest")
+        itemLine(q.reward, via, signed(q.gain))
+    end
     local chain = GP.Route.Chain(q.id)
     if #chain > 1 then chainSteps(chain, q.id) end
 end
@@ -2393,14 +2401,19 @@ local function fillRow(r, kind, data, width, list)
             local icons = { accept = "Interface\\GossipFrame\\AvailableQuestIcon", objective = "Interface\\Icons\\Ability_Hunter_SniperShot",
                 turnin = "Interface\\GossipFrame\\ActiveQuestIcon" }
             r.icon:SetTexture(icons[t.kind])
-            r.name:SetText(("%d. %s"):format(data.index, t.quest.title or ("#" .. t.quest.id)))
+            r.name:SetText(("%d. %s"):format(data.index, GP.QuestRoute.Title(t.quest)))
             local sub = { GP.QuestRoute.TaskText(t) }
             local here = GP.QuestRoute.Position()
             if t.p and here then
                 local d = GP.QuestRoute.Distance(here, t.p)
                 if d < 5000 then sub[#sub + 1] = (L("%d m"):format(math.floor(d))) end
             end
-            if t.kind == "turnin" and (t.quest.gain or 0) > 0 then sub[#sub + 1] = "|cff85d6a0" .. signed(t.quest.gain) .. "|r" end
+            -- The gear it brings: on accepting (what you go for) and on turning in (where you get it).
+            local q = t.quest
+            if (q.gain or 0) > 0 and q.reward and (t.kind == "accept" or (t.kind == "turnin" and not q.rewardQuest)) then
+                sub[#sub + 1] = "|cff85d6a0" .. signed(q.gain) .. "|r " .. S.QualityColor(q.reward.quality) .. (q.reward.name or "") .. "|r"
+                    .. (q.rewardQuest and (" " .. L("(chain)")) or "")
+            end
             r.sub:SetText(table.concat(sub, " · "))
             r.value:SetText((t.kind == "turnin" and t.quest.xp > 0) and GP.QuestXP.Text(t.quest.xp) or "")
             color(r.value, C.gold)

@@ -92,6 +92,35 @@ local function available(db, id, ctx)
 end
 QR.Available = available
 
+-- Follow-up quests: quest -> the quests that need it (from the prerequisites, qx[3] and qx[4]).
+function QR.Children(db)
+    local children = {}
+    for id, detail in pairs(db.qx or {}) do
+        for _, field in ipairs({ 3, 4 }) do
+            for _, pre in ipairs(type(detail[field]) == "table" and detail[field] or {}) do
+                children[pre] = children[pre] or {}
+                table.insert(children[pre], id)
+            end
+        end
+    end
+    return children
+end
+-- The best reward on the way: the quest's own or one of its follow-ups (a chain's first quest leads to the
+-- reward at its end). own(id) -> gain, item. Returns gain, item, quest that gives it.
+function QR.ChainReward(children, id, own, depth, seen)
+    depth, seen = depth or 0, seen or {}
+    if seen[id] or depth > 8 then return 0 end
+    seen[id] = true
+    local bestGain, bestItem, bestQuest = own(id)
+    bestGain = bestGain or 0
+    if bestGain > 0 then bestQuest = id end
+    for _, child in ipairs(children[id] or {}) do
+        local gain, item, quest = QR.ChainReward(children, child, own, depth + 1, seen)
+        if gain > bestGain then bestGain, bestItem, bestQuest = gain, item, quest end
+    end
+    return bestGain, bestItem, bestQuest
+end
+
 -- Quests worth doing now: available or in your log, with giver, turn-in and objective places and a value.
 function QR.Candidates(db, ctx)
     local list = {}
@@ -104,14 +133,17 @@ function QR.Candidates(db, ctx)
             local ender = spot(db, enderRef, giver or ctx.position) or giver
             if (giver or active) and ender then
                 local xp = ctx.xp(id, quest[2]) or 0
-                local gain = ctx.gain and ctx.gain(id) or 0
+                local gain, reward, rewardQuest = 0, nil, nil
+                if ctx.gain then gain, reward, rewardQuest = ctx.gain(id) end
+                gain = gain or 0
                 local detail = db.qx and db.qx[id] or {}
                 local zone = detail[11]
                 list[#list + 1] = {
                     id = id, title = quest[1], level = quest[2], active = active, zone = zone,
                     zoneName = db.area and db.area[zone] and db.area[zone][1] or nil,
                     giver = giver, giverRef = giverRef, ender = ender, enderRef = enderRef,
-                    objectives = objectives(db, id, giver or ender), xp = xp, gain = gain,
+                    objectives = objectives(db, id, giver or ender), xp = xp, gain = gain, reward = reward,
+                    rewardQuest = rewardQuest ~= id and rewardQuest or nil,
                     value = xp + gain * (ctx.weight or QR.focus.balanced),
                 }
             end
@@ -264,23 +296,39 @@ function QR.Position()
     return { instance, y, x }
 end
 
--- Best reward gain per quest (your class, your gear), from the quest rows.
-local function gains()
+-- Best reward of one quest for you (your class and gear): gain and item. Items still loading are counted
+-- once they arrive (the plan is worked out again then).
+local function rewardsOf()
     local player = GP.Player()
     local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance, player.raceBit) or {}
-    local equipped = GP.ReadGear and GP.ReadGear() or {}
-    local profile = GP.ActiveProfile()
-    local out = {}
+    local byQuest = {}
     for _, row in ipairs(rows) do
         if row.source == "Quests" then
-            local item = GP.ItemData(row.itemID)
-            if item.name then
-                local result = GP.Planner.Compare(item, equipped, profile, player.class, player.level)
-                if result and result.gain and result.gain > (out[row.sourceID] or 0) then out[row.sourceID] = result.gain end
-            end
+            byQuest[row.sourceID] = byQuest[row.sourceID] or {}
+            table.insert(byQuest[row.sourceID], row)
         end
     end
-    return out
+    local equipped = GP.ReadGear and GP.ReadGear() or {}
+    local profile = GP.ActiveProfile()
+    local cache = {}
+    return function(id)
+        if cache[id] then return cache[id][1], cache[id][2] end
+        local bestGain, bestItem, complete = 0, nil, true
+        for _, row in ipairs(byQuest[id] or {}) do
+            local item = GP.ItemData(row.itemID)
+            if item.name then
+                -- Judged at the item's own level: a reward at the end of a chain may need a few more levels.
+                local level = math.max(player.level, item.minLevel or 0)
+                local result = GP.Planner.Compare(item, equipped, profile, player.class, level)
+                if result and result.gain and result.gain > bestGain then bestGain, bestItem = result.gain, item end
+            else
+                complete = false
+                QR.loading = true
+            end
+        end
+        if complete then cache[id] = { bestGain, bestItem } end
+        return bestGain, bestItem
+    end
 end
 
 -- The current plan (cached until something changes).
@@ -291,8 +339,14 @@ function QR.Current()
     local player = GP.Player()
     local s = GP.settings
     local twins = GP.Sources.Twins(db)
-    QR.gainCache = QR.gainCache or gains()
-    local gainOf = QR.gainCache
+    QR.children = QR.children or QR.Children(db)
+    -- Rewards are judged once and kept until your gear, your level or item data changes.
+    if not QR.own then
+        QR.loading = false
+        QR.own = rewardsOf()
+    end
+    local own = QR.own
+    local chainCache = {}
     local xpCache = {}
     local ctx = {
         class = player.class, faction = player.faction, raceBit = player.raceBit, level = player.level,
@@ -306,7 +360,10 @@ function QR.Current()
             end
             return xpCache[id]
         end,
-        gain = function(id) return gainOf[id] or 0 end,
+        gain = function(id)
+            if not chainCache[id] then chainCache[id] = { QR.ChainReward(QR.children, id, own) } end
+            return chainCache[id][1], chainCache[id][2], chainCache[id][3]
+        end,
         -- A Classic quest whose Forever twin is in the database: only the twin counts.
         replaced = function(id)
             for _, twin in ipairs(twins[id] or {}) do
@@ -337,6 +394,11 @@ end
 function QR.MapPoint(t)
     if not t.p then return nil end
     return GP.Sources.MapPoint({ world = true, map = t.p[1], x = t.p[2], y = t.p[3] })
+end
+
+-- Quest title in your language (the game's), ForeverDB's English one until the game has it.
+function QR.Title(q)
+    return GP.Sources.QuestTitle(q.id, q.title) or q.title or ("#" .. q.id)
 end
 
 -- Text of a task: "Accept", "Objective: Kobold Vermin", "Turn in".
@@ -372,20 +434,21 @@ function QR.Follow(on)
         if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
     end
     if type(TomTom) == "table" and TomTom.AddWaypoint and uiMap and x then
-        pcall(TomTom.AddWaypoint, TomTom, uiMap, x, y, { title = t.quest.title .. " · " .. QR.TaskText(t), from = "GearPilot", persistent = false })
+        pcall(TomTom.AddWaypoint, TomTom, uiMap, x, y, { title = QR.Title(t.quest) .. " · " .. QR.TaskText(t), from = "GearPilot", persistent = false })
     end
-    say((L("Quest route %d of %d: "):format(i, #QR.Current().tasks)) .. t.quest.title .. " · " .. QR.TaskText(t))
+    say((L("Quest route %d of %d: "):format(i, #QR.Current().tasks)) .. QR.Title(t.quest) .. " · " .. QR.TaskText(t))
 end
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA",
-    "PLAYER_EQUIPMENT_CHANGED" }) do
+    "PLAYER_EQUIPMENT_CHANGED", "ITEM_DATA_LOAD_RESULT" }) do
     events:RegisterEvent(event)
 end
 local pendingUpdate = false
 events:SetScript("OnEvent", function(_, event)
+    if event == "ITEM_DATA_LOAD_RESULT" and not QR.loading then return end
+    if event == "ITEM_DATA_LOAD_RESULT" or event == "PLAYER_LEVEL_UP" or event == "PLAYER_EQUIPMENT_CHANGED" then QR.own = nil end
     QR.Invalidate()
-    if event == "PLAYER_LEVEL_UP" or event == "PLAYER_EQUIPMENT_CHANGED" then QR.gainCache = nil end
     if pendingUpdate or not C_Timer then return end
     pendingUpdate = true
     C_Timer.After(0.6, function()
