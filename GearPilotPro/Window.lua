@@ -191,6 +191,7 @@ local navIcons = {
     auction = "Interface\\Icons\\INV_Misc_Coin_04", wishlist = "Interface\\Icons\\INV_Misc_Note_06",
     bags = "Interface\\Icons\\INV_Misc_Bag_08", gear = "Interface\\Icons\\INV_Chest_Cloth_17",
     settings = "Interface\\Icons\\INV_Misc_Gear_01", help = "Interface\\Icons\\INV_Misc_QuestionMark",
+    route = "Interface\\Icons\\INV_Misc_Map_01",
 }
 local function navButton(key, caption)
     local b = CreateFrame("Button", nil, side)
@@ -226,13 +227,13 @@ local function navButton(key, caption)
     return b
 end
 local mainPages = {
-    { key = "upgrades", label = L("Best upgrades") }, { key = "quests", label = L("Quests") },
+    { key = "upgrades", label = L("Best upgrades") }, { key = "route", label = L("Quest route") }, { key = "quests", label = L("Quests") },
     { key = "dungeons", label = L("Dungeons") }, { key = "shop", label = L("Buy & craft") },
     { key = "auction", label = L("Auction house") }, { key = "wishlist", label = L("Wishlist") },
     { key = "bags", label = L("Bags") }, { key = "gear", label = L("Equipped gear") },
 }
 for i, page in ipairs(mainPages) do
-    navButton(page.key, page.label):SetPoint("TOPLEFT", side, "TOPLEFT", 8, -124 - (i - 1) * 36)
+    navButton(page.key, page.label):SetPoint("TOPLEFT", side, "TOPLEFT", 8, -124 - (i - 1) * 34)
 end
 navButton("settings", L("Settings")):SetPoint("BOTTOMLEFT", side, "BOTTOMLEFT", 8, 96)
 navButton("help", L("Help")):SetPoint("BOTTOMLEFT", side, "BOTTOMLEFT", 8, 60)
@@ -409,6 +410,27 @@ local goldLabel = S.Text(maxPill, "GameFontHighlightSmall", maxPill:GetWidth() +
 goldLabel:SetTextColor(.88, .69, .31)
 maxPill:SetWidth(maxPill:GetWidth() + 74)
 segmentPill({ "bags" }, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", "Can go" } }, "views.bags", "upgrades")
+segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
+segmentPill({ "route" }, "Dungeon quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeDungeon", false)
+actionPill({ "route" }, "Route", 90, {
+    { "Go", function() GP.QuestRoute.Follow(true) end },
+    { "Map", function()
+        local plan = GP.QuestRoute.Current()
+        local points = {}
+        for i, t in ipairs(plan and plan.tasks or {}) do
+            if not GP.QuestRoute.TaskDone(t) then
+                local uiMap, x, y = GP.QuestRoute.MapPoint(t)
+                if uiMap and x then
+                    points[#points + 1] = { uiMap = uiMap, x = x, y = y, label = tostring(i), questID = t.kind == "accept" and t.quest.id or nil,
+                        kind = t.kind == "accept" and "quest" or t.kind == "turnin" and "active" or "done",
+                        title = t.quest.title, sub = GP.QuestRoute.TaskText(t) }
+                end
+            end
+        end
+        GP.Map.Show(L("Quest route"), points)
+    end },
+    { "Stop", function() GP.QuestRoute.Follow(false) end },
+})
 segmentPill({ "gear" }, "View", 110, { { "worn", "Equipped" }, { "weapons", "Weapon setup" } }, "views.gear", "worn")
 segmentPill({ "gear" }, "Weapons from", 110, { { "own", "Worn & bags" }, { "all", "All sources" } }, "weaponPool", "own")
 segmentPill({ "wishlist" }, "View", 130, { { "list", "My wishlist" }, { "bis", "BIS (calculated)" } }, "views.wishlist", "list")
@@ -1623,6 +1645,50 @@ local function showDungeon(dungeon, profile, equipped)
     end
 end
 
+-- Details of a route task: the quest, its experience and best reward, where to go, and its chain.
+local function showRouteTask(data, profile, equipped)
+    local QR = GP.QuestRoute
+    if data.travel then
+        showHead("Interface\\Icons\\Ability_Mount_Wyvern_01", L("Travel to ") .. (data.zone.name or "?"),
+            (L("about %d m away"):format(math.floor(data.zone.distance))))
+        detailLine("GameFontHighlightSmall", L("The quests here are worth more than those nearby, even with the way there."))
+        if data.flight then detailLine("GameFontHighlightSmall", L("Nearest flight point of your faction: ") .. data.flight) end
+        local center = data.zone.center
+        if center then
+            local spot = { world = true, map = center[1], x = center[2], y = center[3] }
+            actions({ L("Waypoint"), function() GP.Route.ToSpot(spot, data.zone.name) end, 140 },
+                { L("Map"), function() GP.Map.Place(data.zone.name, data.zone.name, L("Quest route"), nil, spot) end, 90 })
+        end
+        return
+    end
+    local t, q = data.task, data.task.quest
+    showHead(t.kind == "accept" and "Interface\\GossipFrame\\AvailableQuestIcon" or "Interface\\GossipFrame\\ActiveQuestIcon",
+        q.title or ("#" .. q.id), QR.TaskText(t) .. (q.zoneName and (" · " .. q.zoneName) or ""))
+    local width = (U.detail:GetWidth() or 300) - 24
+    S.Metrics(U.detail, {
+        { label = L("Experience"), value = q.xp > 0 and GP.QuestXP.Text(q.xp) or "-", color = C.gold, emphasis = true },
+        { label = L("Best reward"), value = (q.gain or 0) > 0 and signed(q.gain) or "-", color = C.green },
+        { label = L("Quest level"), value = tostring(q.level or "?"), color = C.text },
+    }, 12, detailY, width)
+    detailY = detailY + 60
+    local uiMap, x, y = QR.MapPoint(t)
+    local place = (t.kind == "objective" and t.label) or (t.kind == "accept" and ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef))
+        or (ForeverDB and GP.Sources.GiverName(ForeverDB, q.enderRef))
+    local zoneName = uiMap and GP.Sources.MapName(uiMap)
+    if place then detailLine("GameFontHighlightSmall", L("Where: ") .. place .. (zoneName and (", " .. zoneName) or "")) end
+    if t.kind == "objective" then
+        detailLine("GameFontDisableSmall", L("The route moves on when the quest is complete or when you reach this place."), C.muted)
+    end
+    actions({ L("Waypoint"), function()
+        if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, q.title, QR.TaskText(t)) end
+    end, 140 }, { L("Map"), function()
+        if uiMap and x then GP.Map.Show(q.title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
+            title = q.title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil } }) end
+    end, 90 })
+    local chain = GP.Route.Chain(q.id)
+    if #chain > 1 then chainSteps(chain, q.id) end
+end
+
 local function showClutter(data, total)
     local item = data.item
     local reason = data.reason == "unusable" and L("Your class cannot use it.")
@@ -1800,6 +1866,7 @@ local function renderHelp()
     text("GameFontHighlightSmall", L("Quest choice rewards: you can take one item per quest, so only the best one is shown."))
     text("GameFontNormal", L("Views"), C.gold)
     text("GameFontHighlightSmall", L("Quests by zone: where questing pays most, with waypoints to every quest giver. Dungeons per dungeon: the expected gain of one run (score gain times drop chance) plus the dungeon quests."))
+    text("GameFontHighlightSmall", L("Quest route: the quests worth most at your level (experience plus the upgrade value of their rewards) in the zone that pays most for the way there, in an order: accept, objectives, turn in, nearest first. Go sets the waypoint to the next step and moves on by itself; the route follows your level and shows the next zone when this one runs dry."))
     text("GameFontHighlightSmall", L("Dungeon details: your upgrades and the expected gain of one run, every quest of the dungeon with its chain and best reward, and the loot of every boss (your upgrades bright, wishlist items marked). Dungeons outside your range stay visible, dimmed."))
     text("GameFontHighlightSmall", L("To go: your own list of dungeons to run. Order it, collect every quest you need before the runs in one go (nearest first), and see how often you have been there."))
     text("GameFontHighlightSmall", L("Buy & craft: vendor gear, the auction house (Auctionator prices) and recipes from CraftPilot. Bags: upgrades, and gear that can go."))
@@ -1825,6 +1892,7 @@ local titles = {
     wishlist = { "Wishlist", "Items you want, where they come from and the way there" },
     bags = { "Bags", "Items in your bags that beat what you wear" },
     gear = { "Equipped gear", "Your equipment and its score" },
+    route = { "Quest route", "The quests worth most at your level, in an order to do them" },
     settings = { "Settings", "Level range, stat profile, sources and helpers" },
     help = { "Help", "How GearPilot works" },
 }
@@ -1913,7 +1981,47 @@ function GP.AdoptBis()
 end
 
 -- What the list of a page shows: kind and data.
+-- Quest route: the open tasks of the plan (a travel row first when the zone is far away), and the summary.
+local function routeData(player)
+    local QR = GP.QuestRoute
+    local plan = QR.Current()
+    if not plan then return {}, false, { missing = true }, "route" end
+    local list = {}
+    local zone = plan.zone
+    if zone and zone.distance > 1500 then
+        local flight = ForeverDB and QR.FlightPoint(ForeverDB, zone.center, player.faction)
+        list[#list + 1] = { key = "route:travel", travel = true, zone = zone, flight = flight }
+    end
+    for i, t in ipairs(plan.tasks) do
+        if not QR.TaskDone(t) then
+            list[#list + 1] = { key = ("route:%d:%s:%d"):format(i, t.kind, t.quest.id), task = t, index = i }
+        end
+    end
+    -- Summary: zone, quests, experience and how far it gets you.
+    local parts = {}
+    if zone then parts[#parts + 1] = zone.name or "?" end
+    parts[#parts + 1] = (L("%d quests"):format(#plan.quests))
+    if plan.xp > 0 then
+        local text = GP.QuestXP.Text(plan.xp)
+        local current, max = UnitXP and UnitXP("player"), UnitXPMax and UnitXPMax("player")
+        if current and max and max > 0 and player.level < 60 then
+            local total = current + plan.xp
+            local levels = math.floor(total / max)
+            local rest = math.floor((total % max) / max * 100 + .5)
+            -- Every level needs more than this one; past the next level this is a rough guide, capped at 60.
+            if player.level + levels >= 60 then levels, rest = 60 - player.level, 0 end
+            text = text .. " · " .. (levels > 0 and (L("enough for level %d + %d %%"):format(player.level + levels, rest))
+                or (L("%d %% of this level"):format(math.floor(plan.xp / max * 100 + .5))))
+        end
+        parts[#parts + 1] = text
+    end
+    if plan.next then parts[#parts + 1] = L("then: ") .. (plan.next.name or "?") end
+    GP.routeSummary = table.concat(parts, "  ·  ")
+    return list, false, {}, "route"
+end
+
 local function pageData(page, s, low, high, equipped, profile, player)
+    if page == "route" then return routeData(player) end
     if page == "gear" then
         if (s.views.gear or "worn") ~= "weapons" then return gearRows(equipped, profile), false, {}, "gear" end
         -- Weapon setups: worn weapons and bags, optionally every source in the level range.
@@ -2186,6 +2294,7 @@ local function emptyMessage(page, kind, loading, states)
     end
     if (GP.settings.slotFilter or "all") ~= "all" then return L("No upgrades for this slot. Choose all slots or another slot.") end
     if kind == "clutter" then return L("Nothing to get rid of: all gear in your bags is useful.") end
+    if page == "route" then return L("No quests worth doing found near your level. Grey quests and quests you have done are left out.") end
     if page == "dungeons" and (GP.settings.views.dungeons or "items") == "togo" then
         return L("Your to go list is empty. Open a dungeon under Per dungeon and add it with + To go.")
     end
@@ -2272,6 +2381,30 @@ local function fillRow(r, kind, data, width, list)
         r.sub:SetText(table.concat(parts, " · "))
         r.value:SetText(data.expected > 0 and ("Ø " .. signed(data.expected)) or "")
         color(r.value, data.inRange and C.green or C.muted)
+    elseif kind == "route" then
+        if data.travel then
+            r.icon:SetTexture("Interface\\Icons\\Ability_Mount_Wyvern_01")
+            r.name:SetText(L("Travel to ") .. (data.zone.name or "?"))
+            r.sub:SetText((L("about %d m away"):format(math.floor(data.zone.distance)))
+                .. (data.flight and (" · " .. L("flight point: ") .. data.flight) or ""))
+            r.value:SetText("")
+        else
+            local t = data.task
+            local icons = { accept = "Interface\\GossipFrame\\AvailableQuestIcon", objective = "Interface\\Icons\\Ability_Hunter_SniperShot",
+                turnin = "Interface\\GossipFrame\\ActiveQuestIcon" }
+            r.icon:SetTexture(icons[t.kind])
+            r.name:SetText(("%d. %s"):format(data.index, t.quest.title or ("#" .. t.quest.id)))
+            local sub = { GP.QuestRoute.TaskText(t) }
+            local here = GP.QuestRoute.Position()
+            if t.p and here then
+                local d = GP.QuestRoute.Distance(here, t.p)
+                if d < 5000 then sub[#sub + 1] = (L("%d m"):format(math.floor(d))) end
+            end
+            if t.kind == "turnin" and (t.quest.gain or 0) > 0 then sub[#sub + 1] = "|cff85d6a0" .. signed(t.quest.gain) .. "|r" end
+            r.sub:SetText(table.concat(sub, " · "))
+            r.value:SetText((t.kind == "turnin" and t.quest.xp > 0) and GP.QuestXP.Text(t.quest.xp) or "")
+            color(r.value, C.gold)
+        end
     elseif kind == "clutter" then
         r.icon:SetTexture(item.icon)
         r.name:SetText(S.QualityColor(item.quality) .. item.name .. "|r")
@@ -2346,6 +2479,7 @@ function GP.Render()
     local equipped = GP.ReadGear()
     local list, loading, states, kind = pageData(page, s, low, high, equipped, profile, player)
     if page == "quests" and GP.questSummary then U.pageSub:SetText(L(titles[page][2]) .. "  ·  " .. GP.questSummary) end
+    if page == "route" and GP.routeSummary then U.pageSub:SetText(GP.routeSummary) end
     if page == "wishlist" then
         if kind == "bis" then
             U.pageSub:SetText(L("Best in slot calculated by GearPilot with your profile (not an official list)"))
@@ -2414,6 +2548,8 @@ function GP.Render()
         showDungeon(found, profile, equipped)
     elseif kind == "clutter" then
         showClutter(found, list.total)
+    elseif kind == "route" then
+        showRouteTask(found, profile, equipped)
     else
         showUpgrade(found, profile)
     end

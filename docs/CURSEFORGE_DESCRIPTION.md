@@ -8,6 +8,7 @@ GearPilot only reads and points the way – it never equips, buys or picks anyth
 
 ## Upgrades
 
+- **Quest route:** the quests worth most at your level (experience plus the upgrade value of their rewards) in the zone that pays most for the way there – accept, objectives, turn in, nearest first, with waypoints that move on by themselves. It follows your level to the next zone.
 - **Best upgrades** from bags, quests and dungeons together, sorted by score gain – vendors, auction house and crafting can be added.
 - **Quests** as items or **by zone** (where questing pays most), sorted by score, distance or zone. Dungeon quests are marked. The details show the **whole quest chain** with waypoints and the game's quest icons: done, in your log, next.
 - **Dungeons** with boss and drop chance, or **per dungeon** with the expected gain of one run – every dungeon, the ones in your own dungeon range first. The dungeon details list every quest of the dungeon with its chain and your best reward, the entrance and the loot of every boss. **Dungeons to go:** your own list, with all pre-quests collected in one go. Includes the **new Forever dungeons** (The Drowned City, Krol'dok Stronghold, Alcaz Prison, Blackmaw Hold, The Shaper's Terrace, City of Dalaran and more). Unknown drop chances are estimated from the boss's loot table and marked as estimated.
@@ -55,6 +56,7 @@ Quest, drop and vendor data: ForeverDB (GPL-3.0). Bosses and loot of the new For
 
 **Welcher Gegenstand macht dich stärker – und wo bekommst du ihn?** GearPilot prüft Taschen, Quest-Belohnungen, Dungeon-Beute, Händler, Auktionshaus und Handwerk in deinem Levelbereich, bewertet jeden Gegenstand für deine Klasse und Talente und zeigt die besten Upgrades zuerst – mit Wegpunkt zum Questgeber, Dungeon-Eingang oder Händler.
 
+- **Questroute:** die lohnendsten Quests deiner Stufe (EP plus Upgrade-Wert) im lohnendsten Gebiet, in Reihenfolge mit mitlaufenden Wegpunkten – auch ins nächste Gebiet.
 - **Beste Upgrades**, **Quests** (auch nach Gebiet, mit ganzer Questreihe), **Dungeons** (pro Dungeon mit erwartetem Gewinn, allen Quests samt Vorquests und der Beute jedes Bosses, eigener Dungeon-Bereich, „Dungeons to go“-Liste), **Kaufen & Herstellen** und **Auktionshaus** mit Goldgrenze.
 - **Kartenfenster** mit allen Questgebern einer Reihe, eines Gebiets oder deiner Dungeon-Vorbereitung – zoombar, mit deiner Position.
 - **Wunschliste** mit allen Quellen und Chat-Hinweisen, **berechnete BIS-Listen** – *GearPilots eigene Berechnung, keine offizielle BIS-Liste*.
