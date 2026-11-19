@@ -7,6 +7,7 @@ local function say(text)
     if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffe0b050GearPilot|r " .. text) end
 end
 local function compare(link)
+    if not link then return nil, nil end
     local item = GP.ItemData(link)
     if not item or not item.name then return nil, item end
     local player = GP.Player()

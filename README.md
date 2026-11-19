@@ -12,6 +12,7 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 
 ## Pages
 
+- **Slot filter** (menu in the filter bar): only one slot, e.g. weapons, chest or rings, on every upgrade list.
 - **Best upgrades:** bags, quests and dungeons together, sorted by score gain; vendors, auction house and crafting can be added in the settings.
 - **Quests:** items or **zones** (where questing pays most, with waypoints to every quest giver). Sort by score, distance or zone; dungeon quests are marked and can be hidden or shown alone. The details show the whole quest chain with waypoints (TomTom: an arrow per step; otherwise the game's map waypoint moves on by itself).
 - **Dungeons:** items with boss and drop chance, or **per dungeon** with the expected gain of one run (score gain × drop chance; unknown chances count as 10 %) and its dungeon quests.
@@ -28,7 +29,7 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 - **Weapon skills:** a note when a weapon type is not learned yet or its skill is low.
 - **Minimap button** (drag it around the minimap; right click opens the settings) and an entry in the game's addon compartment.
 
-The window can be resized with the grip in the bottom right corner; size and position are saved. Quest chains show every step with the game's quest icons: done, in your quest log, next.
+The window can be resized with the grip in the bottom right corner; size and position are saved. Quests limited to one race (e.g. humans only) are only shown to that race. Spell school damage (fire, frost, ...) is scored per school, so a Pawn fire scale does not count frost damage. Quest chains show every step with the game's quest icons: done, in your quest log, next.
 
 ## Scoring
 

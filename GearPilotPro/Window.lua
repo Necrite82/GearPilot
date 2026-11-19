@@ -290,7 +290,7 @@ U.bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -TOP)
 U.bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -TOP)
 U.bar:SetHeight(44)
 U.bar.groups = {}
-local CAPTION, COLUMN2 = 104, 372
+local CAPTION, COLUMN2 = 96, 376
 local function setting(path)
     local s = GP.settings
     if path:find("%.") then
@@ -332,15 +332,64 @@ local function segmentGroup(page, rowIndex, column, label, width, options, field
     U.bar.groups[#U.bar.groups + 1] = holder
 end
 segmentGroup("quests", 1, 1, "View", 96, { { "items", "Items" }, { "zones", "Zones" } }, "views.quests", "items")
-segmentGroup("quests", 1, 2, "Sort", 76, { { "gain", "Score" }, { "distance", "Distance" }, { "zone", "Zone" } }, "questSort", "gain")
+segmentGroup("quests", 1, 2, "Sort", 80, { { "gain", "Score" }, { "distance", "Distance" }, { "zone", "Zone" } }, "questSort", "gain")
 segmentGroup("quests", 2, 1, "Dungeon quests", 96, { { "show", "Show" }, { "hide", "Hide" }, { "only", "Only" } }, "dungeonQuests", "show")
 segmentGroup("dungeons", 1, 1, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" } }, "views.dungeons", "items")
 segmentGroup("shop", 1, 1, "Source", 104, { { "all", "All" }, { "Vendors", "Vendors" }, { "Auction", "Auction house" }, { "Crafted", "Crafting" } }, "shopSource", "all")
-segmentGroup("shop", 2, 1, "Sort", 82, { { "gain", "Score" }, { "price", "Price" }, { "value", "Per gold" } }, "shopSort", "gain")
+segmentGroup("shop", 2, 1, "Sort", 80, { { "gain", "Score" }, { "price", "Price" }, { "value", "Per gold" } }, "shopSort", "gain")
 segmentGroup("shop", 2, 2, "Max. price", 58, { { 0, "All" }, { 10000, "1g" }, { 100000, "10g" }, { 500000, "50g" } }, "shopMax", 0)
 segmentGroup("bags", 1, 1, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", "Can go" } }, "views.bags", "upgrades")
 segmentGroup("gear", 1, 1, "View", 110, { { "worn", "Equipped" }, { "weapons", "Weapon setup" } }, "views.gear", "worn")
 segmentGroup("gear", 1, 2, "Weapons from", 110, { { "own", "Worn & bags" }, { "all", "All sources" } }, "weaponPool", "own")
+-- Slot filter: a menu button at the right end of the bar (on the pages with upgrade lists).
+local slotGroups = {
+    { "all", "All slots" }, { "weapons", "Weapons (all)", { 16, 17, 18 } }, { "16", "Main hand", { 16 } },
+    { "17", "Off hand", { 17 } }, { "18", "Ranged slot", { 18 } }, { "1", "Head", { 1 } }, { "2", "Neck", { 2 } },
+    { "3", "Shoulders", { 3 } }, { "15", "Back", { 15 } }, { "5", "Chest", { 5 } }, { "9", "Wrists", { 9 } },
+    { "10", "Hands", { 10 } }, { "6", "Waist", { 6 } }, { "7", "Legs", { 7 } }, { "8", "Feet", { 8 } },
+    { "rings", "Rings", { 11, 12 } }, { "trinkets", "Trinkets", { 13, 14 } },
+}
+local slotRows = { upgrades = 1, quests = 2, dungeons = 1, shop = 3, bags = 1 }
+local function slotGroup()
+    local key = GP.settings and GP.settings.slotFilter or "all"
+    for _, group in ipairs(slotGroups) do
+        if group[1] == key then return group end
+    end
+    return slotGroups[1]
+end
+function GP.SlotAllowed(slot)
+    local group = slotGroup()
+    if not group[3] then return true end
+    for _, value in ipairs(group[3]) do
+        if value == slot then return true end
+    end
+    return false
+end
+U.slotHolder = CreateFrame("Frame", nil, U.bar)
+U.slotHolder:SetSize(CAPTION + 170, 28)
+local slotCaption = S.Text(U.slotHolder, "GameFontHighlightSmall", 0, 8, CAPTION - 8, L("Slot"))
+slotCaption:SetTextColor(.72, .70, .66)
+U.slotButton = S.Button(U.slotHolder, 170, 28, "", function()
+    U.slotMenu:SetShown(not U.slotMenu:IsShown())
+end)
+U.slotButton:SetPoint("TOPLEFT", U.slotHolder, "TOPLEFT", CAPTION, 0)
+U.slotMenu = S.Surface(frame, "raised")
+U.slotMenu:SetFrameStrata("DIALOG")
+U.slotMenu:SetPoint("TOPRIGHT", U.slotButton, "BOTTOMRIGHT", 0, -4)
+U.slotMenu:SetSize(186, 12 + #slotGroups * 26)
+U.slotMenu:Hide()
+U.slotItems = {}
+for i, group in ipairs(slotGroups) do
+    local b = S.Button(U.slotMenu, 170, 24, L(group[2]), function()
+        GP.settings.slotFilter = group[1]
+        U.slotMenu:Hide()
+        GP.Render()
+    end)
+    b:SetPoint("TOPLEFT", U.slotMenu, "TOPLEFT", 8, -6 - (i - 1) * 26)
+    b.key = group[1]
+    U.slotItems[i] = b
+end
+
 local function barRows(page)
     local rows = 0
     for _, holder in ipairs(U.bar.groups) do
@@ -350,6 +399,20 @@ local function barRows(page)
             rows = math.max(rows, holder.row)
             for _, b in ipairs(holder.buttons) do S.Segment(b, (setting(b.field) or b.default) == b.value) end
         end
+    end
+    local slotRow = slotRows[page]
+    if page == "dungeons" and (GP.settings.views.dungeons or "items") == "overview" then slotRow = 1 end
+    U.slotHolder:SetShown(slotRow ~= nil)
+    if slotRow then
+        rows = math.max(rows, slotRow)
+        U.slotHolder:ClearAllPoints()
+        U.slotHolder:SetPoint("TOPRIGHT", U.bar, "TOPRIGHT", -12, -(8 + (slotRow - 1) * 34))
+        local group = slotGroup()
+        U.slotButton:SetText(L(group[2]))
+        if group[1] == "all" then S.Segment(U.slotButton, false) else S.Primary(U.slotButton) end
+        for _, b in ipairs(U.slotItems) do S.Segment(b, b.key == group[1]) end
+    else
+        U.slotMenu:Hide()
     end
     U.bar:SetShown(rows > 0)
     U.bar:SetHeight(rows * 34 + 10)
@@ -485,7 +548,7 @@ local function statLines(diff, profile)
     end
     local most = 0
     for _, d in ipairs(diff) do
-        d.points = d.delta * (profile and profile[d.key] or 0)
+        d.points = d.delta * (P.Weight(profile, d.key) or 0)
         most = math.max(most, math.abs(d.points))
     end
     local width = (U.detail:GetWidth() or 300) - 24
@@ -664,8 +727,13 @@ end
 local function recommend(sources, low, high, equipped, profile, player)
     local candidates, loading, states = collect(sources, low, high)
     local s = GP.settings
-    return P.Recommend(candidates, equipped, { level = player.level, below = s.below, above = s.above, profile = profile,
-        class = player.class }), loading, states
+    local all = P.Recommend(candidates, equipped, { level = player.level, below = s.below, above = s.above, profile = profile,
+        class = player.class })
+    local list = {}
+    for _, result in ipairs(all) do
+        if GP.SlotAllowed(result.slot) then list[#list + 1] = result end
+    end
+    return list, loading, states
 end
 
 local function gearRows(equipped, profile)
@@ -695,7 +763,7 @@ local function showItemHead(item, sub)
 end
 local function percentText(gain, base)
     if not base or base <= 0 then return "" end
-    return "  |cff85d6a0" .. signed(gain / base * 100) .. " %|r"
+    return signed(gain / base * 100) .. " %"
 end
 
 local function questBlock(row)
@@ -766,7 +834,7 @@ local function showUpgrade(result, profile)
         third = { label = L("Required level"), value = tostring(item.minLevel or "?") }
     end
     S.Metrics(U.detail, {
-        { label = L("Score gain") .. percentText(result.gain, result.score - result.gain), value = signed(result.gain),
+        { label = L("Score gain"), note = percentText(result.gain, result.score - result.gain), value = signed(result.gain),
             color = C.green, emphasis = true },
         { label = L("Replaces"), value = replaced, color = C.text },
         third,
@@ -822,7 +890,7 @@ local function showGear(data, profile)
         local v = item.stats and item.stats[key]
         if v and v ~= 0 then
             any = true
-            local weight = profile[key]
+            local weight = P.Weight(profile, key)
             detailLine("GameFontHighlightSmall", ("%s  %s%s"):format(number(v), L(St.names[key]),
                 weight and ("  |cff9dabb8× " .. number(weight) .. "|r") or "  |cff9dabb8" .. L("(not weighted)") .. "|r"), C.text, 4)
         end
@@ -1224,7 +1292,10 @@ local function pageData(page, s, low, high, equipped, profile, player)
     -- bags
     if (s.views.bags or "upgrades") == "clutter" then
         local entries, loading = collect({ "Bags" }, low, high)
-        local list = P.Clutter(entries, equipped, profile, player.class, player.level, GP.Reserved())
+        local list = {}
+        for _, data in ipairs(P.Clutter(entries, equipped, profile, player.class, player.level, GP.Reserved())) do
+            if not data.slot or GP.SlotAllowed(data.slot) then list[#list + 1] = data end
+        end
         local total = 0
         for _, data in ipairs(list) do total = total + (data.item.sellPrice or 0) end
         list.total = total
@@ -1242,6 +1313,7 @@ local function emptyMessage(page, kind, loading, states)
     if page == "shop" and (states.noauction or states.nocraftpilot) then
         return L("No upgrades here. The auction house needs Auctionator with a scan, crafting needs CraftPilot.")
     end
+    if (GP.settings.slotFilter or "all") ~= "all" then return L("No upgrades for this slot. Choose all slots or another slot.") end
     if kind == "clutter" then return L("Nothing to get rid of: all gear in your bags is useful.") end
     return L("No upgrades in this selection. Try a wider level range in the settings.")
 end
@@ -1446,7 +1518,7 @@ function GP.Toggle()
     if frame:IsShown() then frame:Hide() else GP.Open() end
 end
 
-frame:SetScript("OnHide", function() U.profileMenu:Hide() end)
+frame:SetScript("OnHide", function() U.profileMenu:Hide(); U.slotMenu:Hide() end)
 frame:SetScript("OnSizeChanged", function() if GP.ScheduleRefresh then GP.ScheduleRefresh() end end)
 -- Saved position and size.
 function GP.RestoreWindow()

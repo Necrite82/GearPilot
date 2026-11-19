@@ -97,13 +97,14 @@ end
 local primaryFont
 function Style.Primary(b)
     b:SetBackdropColor(.88, .69, .31, 1)
-    primaryFont = primaryFont or Style.Font("GameFontHighlightSmall", .11, .08, .02)
+    -- Larger and darker than the normal button text: dark text on gold needs the weight to stay readable.
+    primaryFont = primaryFont or Style.Font("GameFontHighlight", .06, .04, 0)
     b:SetNormalFontObject(primaryFont)
     b:SetHighlightFontObject(primaryFont)
     b:SetDisabledFontObject(primaryFont)
     local label = b:GetFontString()
     if label then
-        label:SetTextColor(.11, .08, .02)
+        label:SetTextColor(.06, .04, 0)
         label:SetShadowOffset(0, 0)
     end
     if b.IsEnabled and not b:IsEnabled() then b:SetBackdropColor(.40, .33, .18, 1) end
@@ -114,11 +115,11 @@ end
 function Style.Segment(b, on)
     if on then return Style.Primary(b) end
     b:SetBackdropColor(0, 0, 0, 0)
-    local quiet = Style.Font("GameFontHighlightSmall", .80, .79, .75)
+    local quiet = Style.Font("GameFontHighlight", .84, .83, .79)
     b:SetNormalFontObject(quiet)
-    b:SetHighlightFontObject(Style.Font("GameFontHighlightSmall"))
+    b:SetHighlightFontObject(Style.Font("GameFontHighlight"))
     local label = b:GetFontString()
-    if label then label:SetTextColor(.80, .79, .75) end
+    if label then label:SetTextColor(.84, .83, .79) end
     return b
 end
 
@@ -131,6 +132,9 @@ function Style.Metrics(parent, values, x, y, width)
         if not p then
             p = Style.Surface(parent, "raised")
             p.label = Style.Text(p, "GameFontDisableSmall", 10, 7, w - 20)
+            p.label:SetWordWrap(false)
+            p.note = Style.Text(p, "GameFontHighlightSmall", 10, 7, w - 20, "", "RIGHT")
+            p.note:SetWordWrap(false)
             p.value = Style.Text(p, "GameFontNormal", 10, 24, w - 20)
             p.value:SetWordWrap(false)
             parent.gpMetrics[i] = p
@@ -140,7 +144,10 @@ function Style.Metrics(parent, values, x, y, width)
         p:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (w + 8), -y)
         p:SetSize(w, 48)
         p.label:SetWidth(w - 20)
+        p.note:SetWidth(w - 20)
         p.value:SetWidth(w - 20)
+        p.note:SetText(v.note or "")
+        p.note:SetTextColor(.52, .84, .63)
         p.label:SetText(v.label)
         p.value:SetText(v.value)
         p.value:SetFontObject(Style.Font(v.emphasis and "GameFontNormalLarge" or "GameFontNormal"))

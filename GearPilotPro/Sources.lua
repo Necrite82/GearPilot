@@ -32,6 +32,31 @@ function Sources.QuestFaction(mask)
     if horde and not alliance then return "Horde" end
     return nil
 end
+-- Race masks: bit 2^(raceID - 1). Classic data often marks a quest for "every Alliance / Horde race" without
+-- the Skyborne bits (2^32 Alliance, 2^33 Horde); such a full faction mask counts for the Skyborne too.
+local ALLIANCE_ALL, HORDE_ALL = 1 + 4 + 8 + 64, 2 + 16 + 32 + 128
+local function fullFaction(mask, all)
+    for _, value in ipairs(all == ALLIANCE_ALL and { 1, 4, 8, 64 } or { 2, 16, 32, 128 }) do
+        if not bit(mask, value) then return false end
+    end
+    return true
+end
+function Sources.RaceAllowed(mask, raceBit, faction)
+    if type(mask) ~= "number" or mask <= 0 then return true end
+    if raceBit and bit(mask, raceBit) then return true end
+    if raceBit then
+        -- A Skyborne (or any race missing from old masks) still gets quests open to the whole faction.
+        if faction == "Alliance" and fullFaction(mask, ALLIANCE_ALL) then return true end
+        if faction == "Horde" and fullFaction(mask, HORDE_ALL) then return true end
+        return false
+    end
+    local questFaction = Sources.QuestFaction(mask)
+    return not questFaction or not faction or questFaction == faction
+end
+function Sources.RaceBit(raceID)
+    return type(raceID) == "number" and raceID > 0 and 2 ^ (raceID - 1) or nil
+end
+
 local classBits = { WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16, SHAMAN = 64, MAGE = 128,
     WARLOCK = 256, DRUID = 1024 }
 function Sources.ClassAllowed(mask, class)
@@ -90,7 +115,7 @@ end
 -- options: { class, faction, minChance (0..1) }
 function Sources.Build(db, options)
     local rows = {}
-    local class, faction = options.class, options.faction
+    local class, faction, raceBit = options.class, options.faction, options.raceBit
     local minChance = (options.minChance or 0.02) * 10000
     for itemID, quests in pairs(db.rew or {}) do
         local item = db.item and db.item[itemID]
@@ -103,7 +128,7 @@ function Sources.Build(db, options)
                 local quest = not superseded and db.quest and db.quest[questID]
                 local detail = db.qx and db.qx[questID] or {}
                 local questFaction = Sources.QuestFaction(detail[1])
-                if quest and (not questFaction or not faction or questFaction == faction)
+                if quest and Sources.RaceAllowed(detail[1], raceBit, faction)
                     and Sources.ClassAllowed(detail[2], class) then
                     local level = quest[2]
                     if type(level) ~= "number" or level <= 0 then level = quest[3] or item[3] end
@@ -215,22 +240,24 @@ function Sources.EquipIndex(db, class)
 end
 
 -- Quest chain: every prerequisite (recursively), earliest first, ending with the quest itself.
--- preQuestSingle means "one of these": the first one whose faction fits is taken.
-function Sources.Chain(db, questID, faction)
+-- preQuestSingle means "one of these": a branch you have already done wins, otherwise the first one open to
+-- your race (or faction). isDone(questID) is optional.
+function Sources.Chain(db, questID, faction, raceBit, isDone)
     local order, seen = {}, {}
     local function visit(id, depth)
         if seen[id] or depth > 20 then return end
         seen[id] = true
         local detail = db.qx and db.qx[id] or {}
         if type(detail[3]) == "table" then
+            local chosen
             for _, pre in ipairs(detail[3]) do
                 local preDetail = db.qx and db.qx[pre] or {}
-                local preFaction = Sources.QuestFaction(preDetail[1])
-                if not preFaction or not faction or preFaction == faction then
-                    visit(pre, depth + 1)
-                    break
+                if Sources.RaceAllowed(preDetail[1], raceBit, faction) then
+                    if isDone and isDone(pre) then chosen = pre break end
+                    chosen = chosen or pre
                 end
             end
+            if chosen then visit(chosen, depth + 1) end
         end
         if type(detail[4]) == "table" then
             for _, pre in ipairs(detail[4]) do visit(pre, depth + 1) end
@@ -282,12 +309,12 @@ function Sources.Database()
     return nil
 end
 
-function Sources.Rows(class, faction, minChance)
-    local signature = table.concat({ class or "", faction or "", tostring(minChance) }, ":")
+function Sources.Rows(class, faction, minChance, raceBit)
+    local signature = table.concat({ class or "", faction or "", tostring(minChance), tostring(raceBit) }, ":")
     if Sources.rows and Sources.signature == signature then return Sources.rows end
     local db = Sources.Database()
     if not db then return nil end
-    Sources.rows = Sources.Build(db, { class = class, faction = faction, minChance = minChance })
+    Sources.rows = Sources.Build(db, { class = class, faction = faction, minChance = minChance, raceBit = raceBit })
     Sources.signature = signature
     return Sources.rows
 end
