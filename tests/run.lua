@@ -415,6 +415,25 @@ local outside = P.Recommend({ row("dungeon 34", "Dungeons", 34, item(330, { AGI 
     { level = 40, below = 1, above = 2, profile = melee, class = "ROGUE" })
 assert(#outside == 0)
 
+-- 1.2.0: quest experience (Classic reduction below your level, ForeverDB fallback, sums, text).
+CreateFrame = CreateFrame or function() return { RegisterEvent = function() end, SetScript = function() end } end
+GP.L = GP.L or function(key) return key end
+local playerLevel = 40
+GP.Player = function() return { level = playerLevel } end
+assert(loadfile("GearPilotPro/QuestXP.lua"))("GearPilotPro", GP)
+local XP = GP.QuestXP
+assert(XP.Factor(35, 40) == 1 and math.abs(XP.Factor(34, 40) - 0.8) < 1e-9 and math.abs(XP.Factor(31, 40) - 0.2) < 1e-9
+    and XP.Factor(30, 40) == 0.1 and XP.Factor(45, 40) == 1)
+ForeverDB = { qrw = { [1] = { 1200, 2000 }, [2] = { 0, 3000 } }, quest = { [1] = { "A", 38 }, [2] = { "B", 33 }, [3] = { "C", 40 } } }
+GearPilotProCache = nil
+assert(XP.Get(1).xp == 2000 and XP.Get(1).money == 1200 and XP.Get(2).xp == 1800 and XP.Get(3).xp == nil)
+local sumXP, sumMoney, sumUnknown = XP.Sum({ { id = 1 }, { id = 2 }, { id = 3 } })
+assert(sumXP == 3800 and sumMoney == 1200 and sumUnknown == 1)
+assert(XP.Text(1500) == "1,500 XP" and XP.Text(150) == "150 XP" and XP.Text(1234567) == "1,234,567 XP")
+playerLevel = 60
+assert(XP.Get(1).xp == 0 and XP.Get(1).money == 1200, "at the top level quests give money, no experience")
+ForeverDB = nil
+
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)

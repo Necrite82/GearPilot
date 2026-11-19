@@ -77,7 +77,8 @@ message:Hide()
 
 -- State: the points, the map shown, zoom (1 = the whole map fits) and offset (pixels, top left of the map).
 local state = { points = {}, maps = {}, map = nil, zoom = 1, offsetX = 0, offsetY = 0 }
-local tiles, pins = {}, {}
+local tiles, overlayTiles, pins = {}, {}, {}
+local updateReveal
 local playerPin
 
 local function art(uiMap)
@@ -90,6 +91,30 @@ local function art(uiMap)
     if not (ok and type(textures) == "table" and #textures > 0) then return nil end
     return { width = layer.layerWidth, height = layer.layerHeight, tileWidth = layer.tileWidth, tileHeight = layer.tileHeight,
         textures = textures }
+end
+
+-- Detail pieces on top of the base map (towns, roads, forests). "Whole map": every piece from the client tables
+-- (Data/MapOverlays.lua, built by tools/maps); otherwise, or without that data, the pieces you have explored.
+-- Each: { offsetX, offsetY, width, height, fileIDs (row by row, 256 px tiles) }.
+local function overlays(uiMap)
+    local reveal = not (GP.settings and GP.settings.mapReveal == false)
+    local data = GP.MapOverlays and GP.MapOverlays.maps and GP.MapOverlays.maps[uiMap]
+    if reveal and data then return data end
+    local list = {}
+    if C_MapExplorationInfo and C_MapExplorationInfo.GetExploredMapTextures then
+        local ok, explored = pcall(C_MapExplorationInfo.GetExploredMapTextures, uiMap)
+        for _, info in ipairs(ok and type(explored) == "table" and explored or {}) do
+            if not info.isShownByMouseOver and info.fileDataIDs then
+                list[#list + 1] = { info.offsetX or 0, info.offsetY or 0, info.textureWidth or 0, info.textureHeight or 0, info.fileDataIDs }
+            end
+        end
+    end
+    return list
+end
+local function pow2(value)
+    local size = 16
+    while size < value do size = size * 2 end
+    return size
 end
 
 -- Fit: the scale at which the whole map fits the view.
@@ -138,7 +163,9 @@ end
 -- Draws the map, the points and your position at the current zoom and offset.
 function Map.Layout()
     if not frame:IsShown() then return end
+    updateReveal()
     for _, t in ipairs(tiles) do t:Hide() end
+    for _, t in ipairs(overlayTiles) do t:Hide() end
     for _, p in ipairs(pins) do p:Hide() end
     if playerPin then playerPin:Hide() end
     local uiMap = state.map
@@ -169,6 +196,33 @@ function Map.Layout()
         t:SetPoint("TOPLEFT", canvas, "TOPLEFT", col * info.tileWidth * scale, -row * info.tileHeight * scale)
         t:SetSize(info.tileWidth * scale, info.tileHeight * scale)
         t:Show()
+    end
+    -- Detail pieces, cut like the world map does: 256 px tiles, the last row and column smaller.
+    local used = 0
+    for _, piece in ipairs(overlays(uiMap)) do
+        local ox, oy, pw, ph, files = piece[1], piece[2], piece[3], piece[4], piece[5]
+        local columns, rowsCount = math.ceil(pw / 256), math.ceil(ph / 256)
+        for row = 1, rowsCount do
+            local pixelH = (row == rowsCount and ph % 256 ~= 0) and ph % 256 or 256
+            for col = 1, columns do
+                local fileID = files[(row - 1) * columns + col]
+                if fileID then
+                    local pixelW = (col == columns and pw % 256 ~= 0) and pw % 256 or 256
+                    used = used + 1
+                    local t = overlayTiles[used]
+                    if not t then
+                        t = canvas:CreateTexture(nil, "BORDER")
+                        overlayTiles[used] = t
+                    end
+                    t:SetTexture(fileID)
+                    t:SetTexCoord(0, pixelW / pow2(pixelW), 0, pixelH / pow2(pixelH))
+                    t:ClearAllPoints()
+                    t:SetPoint("TOPLEFT", canvas, "TOPLEFT", (ox + (col - 1) * 256) * scale, -(oy + (row - 1) * 256) * scale)
+                    t:SetSize(pixelW * scale, pixelH * scale)
+                    t:Show()
+                end
+            end
+        end
     end
     local n = 0
     for _, point in ipairs(state.points) do
@@ -267,6 +321,18 @@ end)
 worldButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -36, -10)
 zoomIn:SetPoint("RIGHT", worldButton, "LEFT", -8, 0)
 zoomOut:SetPoint("RIGHT", zoomIn, "LEFT", -4, 0)
+-- Whole map or only what you have explored (for players who want to discover it themselves).
+local revealButton = S.Button(frame, 130, 24, "", function(self)
+    if not GP.settings then return end
+    GP.settings.mapReveal = GP.settings.mapReveal == false
+    Map.Layout()
+end)
+revealButton:SetPoint("RIGHT", zoomOut, "LEFT", -8, 0)
+function updateReveal()
+    local reveal = not (GP.settings and GP.settings.mapReveal == false)
+    revealButton:SetText(reveal and L("Whole map") or L("Explored only"))
+    S.Segment(revealButton, reveal)
+end
 
 local function tab(i)
     local b = tabs[i]

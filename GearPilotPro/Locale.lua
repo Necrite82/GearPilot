@@ -358,6 +358,15 @@ local de = {
     ["Map"] = "Karte", ["World map"] = "Weltkarte", ["Click: waypoint"] = "Klick: Wegpunkt", ["Dungeons to go"] = "Dungeons to go",
     ["GearPilot cannot draw this map. Open it on the world map instead."] = "Diese Karte kann GearPilot nicht zeichnen. Öffne sie stattdessen auf der Weltkarte.",
     ["No positions known for these points."] = "Für diese Punkte sind keine Positionen bekannt.",
+    -- 1.2.0
+    ["%s still open"] = "noch %s offen", ["(+%d without a value)"] = "(+%d ohne Angabe)", ["(ForeverDB)"] = "(ForeverDB)",
+    ["Asked the server for quest %d. ForeverDB: %s."] = "Quest %d beim Server angefragt. ForeverDB: %s.",
+    ["Explored only"] = "Nur Erkundetes", ["Whole map"] = "Ganze Karte",
+    ["No answer from the server for quest %d: GearPilot uses ForeverDB's values."] = "Keine Antwort vom Server für Quest %d: GearPilot nutzt die Werte aus ForeverDB.",
+    ["Quest %d from the server: %s, money %s."] = "Quest %d vom Server: %s, Gold %s.",
+    ["Reward: "] = "Belohnung: ", ["Show all %d steps"] = "Alle %d Schritte zeigen", ["Show fewer steps"] = "Weniger Schritte zeigen",
+    ["THOUSANDS_SEPARATOR"] = ".", ["The open quests give %s, pre-quests included."] = "Die offenen Quests geben %s, Vorquests mitgezählt.",
+    ["XP"] = "EP", ["no value"] = "kein Wert",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

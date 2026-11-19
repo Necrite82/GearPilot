@@ -24,9 +24,13 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 - **Equipped gear:** every slot with its score and the values that count for your profile. **Weapon setup** compares your best two-hand weapon with your best main hand + off hand (a second weapon for dual wielders, shield or held item otherwise), from what you wear and carry or from every source; an off-hand weapon's DPS counts half.
 - **Settings:** level range, stat profile (automatic from your talents, six built-in profiles or your own, Pawn / WoWSims import), sources, minimum drop chance and the helpers below.
 
+## Quest experience
+
+Quest details, chain steps and dungeon quests show their experience; chains and dungeons show what is still open (pre-quests included). GearPilot asks the server for the quests it shows (`C_QuestLog.RequestLoadQuestByID`, then the quest's reward experience and money) and keeps the answers in `GearPilotProCache`; without an answer it takes ForeverDB's value and applies the Classic reduction for quests far below your level. `/gpp ep <questID>` tests one quest.
+
 ## Map
 
-A map window in GearPilot's look opens with "Map": quest givers of a chain (numbered), all quest givers of a zone, the quests to collect before a dungeon with its entrance, or everything on your to go list. Zoom with the mouse wheel or + and −, drag to move, hover a point for quest and giver, click it for a waypoint. Points in several zones get one tab per zone; a button opens the zone on the game's world map. The map art comes from the game client (C_Map art layers).
+A map window in GearPilot's look opens with "Map": quest givers of a chain (numbered), all quest givers of a zone, the quests to collect before a dungeon with its entrance, or everything on your to go list. Zoom with the mouse wheel or + and −, drag to move, hover a point for quest and giver, click it for a waypoint. Points in several zones get one tab per zone; a button opens the zone on the game's world map. The map art comes from the game client (C_Map art layers). "Whole map" adds every detail piece of the zone (towns, roads, forests) from `GearPilotPro/Data/MapOverlays.lua`, which `tools/maps/build_overlays.py` builds from the Forever client tables on wago.tools (workflow `.github/workflows/maps.yml`, every Monday or by hand, pull request `data/maps`); "Explored only" shows what you have explored, as the world map does.
 
 ## Helpers outside the window
 
