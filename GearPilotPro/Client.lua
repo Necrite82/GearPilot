@@ -131,6 +131,10 @@ local function initialize()
     end
     saved.views = type(saved.views) == "table" and saved.views or {}
     saved.shopSource = saved.shopSource or "all"
+    saved.weaponPool = saved.weaponPool == "all" and "all" or "own"
+    saved.shopSort = (saved.shopSort == "price" or saved.shopSort == "value") and saved.shopSort or "gain"
+    saved.shopMax = tonumber(saved.shopMax) or 0
+    if saved.minimap == nil then saved.minimap = true end
     if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"
     saved.dungeonQuests = (saved.dungeonQuests == "hide" or saved.dungeonQuests == "only") and saved.dungeonQuests or "show"

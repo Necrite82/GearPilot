@@ -317,9 +317,18 @@ function Sources.MapPoint(spot)
     if not spot then return nil end
     if not spot.world then return spot.map, spot.x, spot.y end
     if not (C_Map and C_Map.GetMapPosFromWorldPos and CreateVector2D) then return nil end
-    local ok, uiMap, pos = pcall(C_Map.GetMapPosFromWorldPos, spot.map, CreateVector2D(spot.x, spot.y))
-    if ok and uiMap and pos then return uiMap, pos.x, pos.y end
-    return nil
+    local vector = CreateVector2D(spot.x, spot.y)
+    local ok, uiMap, pos = pcall(C_Map.GetMapPosFromWorldPos, spot.map, vector)
+    if not (ok and uiMap and pos) then return nil end
+    -- The continent map comes first; the zone at that spot gives the zone name and zone coordinates.
+    if C_Map.GetMapInfoAtPosition then
+        local found, info = pcall(C_Map.GetMapInfoAtPosition, uiMap, pos.x, pos.y)
+        if found and info and info.mapID and info.mapID ~= uiMap then
+            local zoneOk, _, zonePos = pcall(C_Map.GetMapPosFromWorldPos, spot.map, vector, info.mapID)
+            if zoneOk and zonePos then return info.mapID, zonePos.x, zonePos.y end
+        end
+    end
+    return uiMap, pos.x, pos.y
 end
 function Sources.WorldPoint(spot)
     if not spot then return nil end
