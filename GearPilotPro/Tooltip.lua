@@ -33,6 +33,9 @@ local function annotate(tooltip, link)
         local note = not result.worn and GP.Skills.Note(item)
         if note then tooltip:AddLine(note, .92, .66, .35, true) end
     end
+    if GP.Wish and GP.Wish.Has(link) then
+        tooltip:AddLine(L("On your wishlist") .. (GP.Wish.List()[item.id] and GP.Wish.List()[item.id].goal and (" · " .. L("goal")) or ""), .88, .69, .31)
+    end
     tooltip:Show()
 end
 

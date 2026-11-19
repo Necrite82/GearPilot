@@ -284,4 +284,81 @@ local twins = S.Twins({ quest = { [286] = { "Return the Statuette" }, [98189] = 
     [6] = { "Same name" }, [7] = { "Same name" } } })
 assert(twins[286][1] == 98189 and twins[98189][1] == 286 and not twins[6], "only Classic <-> Forever pairs")
 
+-- 0.7.0: best in slot, wishlist text, item sources
+local bisPool = {
+    { item = item(300, { AGI = 10 }, 30, "INVTYPE_CHEST", 4, 2), key = "a" },
+    { item = item(301, { AGI = 14 }, 30, "INVTYPE_CHEST", 4, 2), key = "b" },
+    { item = item(302, { AGI = 99 }, 45, "INVTYPE_CHEST", 4, 2), key = "too high" },
+    { item = item(303, { AGI = 6 }, 30, "INVTYPE_FINGER", 4, 0), key = "r1" },
+    { item = item(304, { AGI = 8 }, 30, "INVTYPE_FINGER", 4, 0), key = "r2" },
+    { item = item(305, { AGI = 4 }, 30, "INVTYPE_FINGER", 4, 0), key = "r3" },
+    { item = item(306, { DPS = 20 }, 30, "INVTYPE_WEAPON", 2, 15), key = "d1" },
+    { item = item(307, { DPS = 18 }, 30, "INVTYPE_WEAPON", 2, 15), key = "d2" },
+    { item = item(308, { AGI = 50 }, 30, "INVTYPE_CHEST", 4, 3), key = "mail" },
+}
+local bis = P.BestInSlot(bisPool, melee, "ROGUE", 30, 40)
+local bySlot = {}
+for _, b in ipairs(bis) do bySlot[b.slot] = b.item.id end
+assert(bySlot[5] == 301, "best usable chest within the level limit, no mail for a rogue")
+assert(bySlot[11] == 304 and bySlot[12] == 303, "two best different rings")
+assert(bySlot[16] == 306 and bySlot[17] == 307, "dual wield daggers")
+local text = P.ExportWishlist({ [303] = { goal = true }, [12] = {} })
+assert(text == "GP1:12,303!")
+local back = P.ImportWishlist("my list GP1:12, 303! ")
+assert(back[12] and not back[12].goal and back[303].goal and P.ImportWishlist("nope") == nil)
+local srcDb = {
+    item = { [500] = { "Cape", 2, 20, 25, 4, 1, 16 } }, quest = { [1] = { "Q", 20, 15 } }, qx = { [1] = { 77 } }, rew = { [500] = { 1 } },
+    npc = { [639] = { "Edwin VanCleef", "", 21, 21, 1 }, [100] = { "Wolf", "", 10, 11, 0 }, [7] = { "Vendor" } },
+    spw = { c639 = { { 36, 1, 2 } } }, drop = { [500] = { 639, 1500, 100, 30 } }, vend = { [500] = { 7 } }, nfac = { [7] = "A" },
+    world = { [500] = 18 }, dng = { [1581] = { "The Deadmines", 40, { 1436, 420, 720 } } },
+}
+local found = S.ItemSources(srcDb, 500, { faction = "Alliance", raceBit = 1, class = "MAGE",
+    catalog = { tailoring = { recipes = { [9] = { name = "Cape", makes = 500, learn = 120 } } } } })
+local kinds = {}
+for _, f in ipairs(found) do kinds[#kinds + 1] = f.kind end
+assert(table.concat(kinds, ",") == "quest,dungeon,vendor,craft,mob,world", table.concat(kinds, ","))
+assert(found[2].name == "The Deadmines" and found[2].chance == 0.15 and found[5].name == "Wolf")
+local door = S.Entrance(srcDb, "The Deadmines")
+assert(door and door.map == 1436 and math.abs(door.x - 0.42) < 1e-9)
+
+assert(S.raidNames["Naxxramas"] and S.raidNames["Molten Core"] and not S.raidNames["The Deadmines"])
+local raidDb = { item = { [600] = { "Tier Shoulders", 4, 60, 88, 4, 4, 3 } }, quest = { [9] = { "Tier quest", 60, 60 } },
+    qx = { [9] = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 3456 } }, rew = { [600] = { 9 } },
+    dng = { [3456] = { "Naxxramas" } } }
+local raidRows = S.Build(raidDb, { class = "WARRIOR", faction = "Alliance" })
+assert(raidRows[1] and raidRows[1].raidQuest, "a quest that plays in a raid is a raid source")
+
+-- AllTheThings dungeon data: bosses without ForeverDB spawns, loot without recorded drops, entrances.
+local att = { instances = { { id = 2970, name = "The Drowned City", level = 35, area = 16550, entrance = { 1434, 21.5, 27.8 },
+    bosses = { { name = "Zul'Alai", npcs = { 900 }, items = { 700, 701 } }, { name = "Tide Lord", npcs = { 901 }, items = { 702 } } } } } }
+local attDb = {
+    item = { [700] = { "Tide Robe", 3, 33, 38, 4, 1, 20 }, [701] = { "Drowned Staff", 3, 33, 38, 2, 10, 17 },
+        [702] = { "Coral Ring", 3, 33, 38, 4, 0, 11 } },
+    npc = { [900] = { "Zul'Alai", "", 36, 36, 1 } }, drop = { [700] = { 900, 0 }, [702] = { 901, 2500 } },
+    dng = { [16550] = { "The Drowned City" } },
+}
+local attRows = S.Build(attDb, { class = "MAGE", faction = "Alliance", att = att })
+local byItem = {}
+for _, r in ipairs(attRows) do byItem[r.itemID] = r end
+assert(byItem[700] and byItem[700].name == "The Drowned City" and byItem[700].forever and not byItem[700].chance
+    and math.abs(byItem[700].estimate - 0.5) < 1e-9, "unknown rate gets the loot table share")
+assert(byItem[701] and byItem[701].boss == "Zul'Alai" and byItem[701].level == 35 and byItem[701].estimate, "ATT-only loot")
+assert(byItem[702] and byItem[702].chance == 0.25 and not byItem[702].estimate, "known rate, boss found via ATT")
+local none = S.Build(attDb, { class = "MAGE", faction = "Alliance" })
+assert(#none == 0, "without ATT the bosses have no dungeon")
+local attSources = S.ItemSources(attDb, 701, { att = att })
+assert(attSources[1] and attSources[1].kind == "dungeon" and attSources[1].estimate == 0.5)
+local attDoor = S.Entrance(attDb, "The Drowned City", att)
+assert(attDoor and attDoor.map == 1434 and math.abs(attDoor.x - 0.215) < 1e-9)
+
+-- The generated file loads and covers the new Forever dungeons.
+local data = {}
+assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)
+local ids = {}
+for _, inst in ipairs(data.DungeonData.instances) do
+    ids[inst.id] = inst
+    for _, boss in ipairs(inst.bosses) do assert(#boss.npcs > 0, inst.name) end
+end
+for _, id in ipairs({ 2970, 2994, 2998, 2999, 3039, 3065 }) do assert(ids[id] and #ids[id].bosses > 0, "dungeon " .. id) end
+
 print("GearPilot checks passed")

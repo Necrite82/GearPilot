@@ -363,6 +363,81 @@ function Planner.WeaponSets(pool, equipped, profile, class, level, maxLevel)
     return result
 end
 
+-- Best in slot, computed by GearPilot from a pool of { item, entry, key } with the weights of a profile:
+-- per slot the highest score; rings and trinkets the two best different items; weapons the better of the best
+-- two-hand weapon and the best main + off hand (WeaponSets). Returns a list in slot order:
+-- { slot, item, entry, score }, slots without a usable item are left out.
+function Planner.BestInSlot(pool, profile, class, level, maxLevel)
+    local best, pairs2 = {}, { [11] = {}, [13] = {} }
+    local function usable(item)
+        return item and item.stats and (item.minLevel or 0) <= (maxLevel or level)
+            and Planner.CanUse(item, class, math.max(level, item.minLevel or 0))
+    end
+    for _, candidate in ipairs(pool) do
+        local item = candidate.item
+        local slots = usable(item) and targetSlots[item.equip]
+        if slots then
+            local slot = slots[1]
+            if slot == 11 or slot == 13 then
+                table.insert(pairs2[slot], { item = item, entry = candidate.entry, score = Planner.SlotScore(item, profile, slot) })
+            elseif slot ~= 16 and slot ~= 17 then
+                local score = Planner.SlotScore(item, profile, slot)
+                if not best[slot] or score > best[slot].score then
+                    best[slot] = { slot = slot, item = item, entry = candidate.entry, score = score }
+                end
+            end
+        end
+    end
+    for first, list in pairs(pairs2) do
+        table.sort(list, function(a, b) return a.score > b.score end)
+        local taken = {}
+        for _, choice in ipairs(list) do
+            local id = choice.item.id
+            if not (id and taken[id]) then
+                local slot = best[first] and first + 1 or first
+                best[slot] = { slot = slot, item = choice.item, entry = choice.entry, score = choice.score }
+                if id then taken[id] = true end
+                if slot == first + 1 then break end
+            end
+        end
+    end
+    local sets = Planner.WeaponSets(pool, {}, profile, class, level, maxLevel)
+    local weapons = sets.pair
+    if sets.twoHand and (not weapons or sets.twoHand.score >= weapons.score) then weapons = sets.twoHand end
+    if weapons then
+        best[16] = { slot = 16, item = weapons.main, entry = weapons.mainEntry, score = Planner.SlotScore(weapons.main, profile, 16) }
+        if weapons.off then
+            best[17] = { slot = 17, item = weapons.off, entry = weapons.offEntry, score = Planner.SlotScore(weapons.off, profile, 17) }
+        end
+    end
+    local list = {}
+    for _, slot in ipairs(Planner.slots) do
+        if best[slot[1]] then list[#list + 1] = best[slot[1]] end
+    end
+    return list
+end
+
+-- Wishlist text for sharing: "GP1:" then item IDs separated by commas, "!" after the ID marks a goal.
+function Planner.ExportWishlist(items)
+    local ids = {}
+    for id in pairs(items) do ids[#ids + 1] = id end
+    table.sort(ids)
+    local parts = {}
+    for _, id in ipairs(ids) do parts[#parts + 1] = id .. (items[id].goal and "!" or "") end
+    return "GP1:" .. table.concat(parts, ",")
+end
+function Planner.ImportWishlist(text)
+    if type(text) ~= "string" then return nil end
+    local body = text:match("GP1:([%d!,%s]+)")
+    if not body then return nil end
+    local items, count = {}, 0
+    for id, goal in body:gmatch("(%d+)(!?)") do
+        items[tonumber(id)] = { goal = goal == "!" }
+        count = count + 1
+    end
+    return count > 0 and items or nil
+end
+
 -- Grey quests: Classic's rule for the highest quest level that gives (almost) no experience.
 function Planner.GreyLevel(level)
     if level <= 5 then return 0 end
@@ -413,7 +488,7 @@ function Planner.ByZone(results)
 end
 
 -- Dungeon upgrades: per dungeon the expected gain of one run (gain x drop chance; an unknown chance counts
--- with UNKNOWN_CHANCE and is marked), its bosses and the dungeon quests with an upgrade.
+-- with its loot table estimate or UNKNOWN_CHANCE and is marked), its bosses and the dungeon quests with an upgrade.
 Planner.UNKNOWN_CHANCE = 0.1
 function Planner.ByDungeon(dropResults, questResults)
     local dungeons, list = {}, {}
@@ -427,7 +502,7 @@ function Planner.ByDungeon(dropResults, questResults)
             list[#list + 1] = entry
         end
         entry.results[#entry.results + 1] = result
-        entry.expected = entry.expected + result.gain * (row.chance or Planner.UNKNOWN_CHANCE)
+        entry.expected = entry.expected + result.gain * (row.chance or row.estimate or Planner.UNKNOWN_CHANCE)
         if not row.chance then entry.unknown = entry.unknown + 1 end
         entry.low = math.min(entry.low, row.level)
         entry.high = math.max(entry.high, row.level)
