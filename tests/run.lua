@@ -328,4 +328,37 @@ local raidDb = { item = { [600] = { "Tier Shoulders", 4, 60, 88, 4, 4, 3 } }, qu
 local raidRows = S.Build(raidDb, { class = "WARRIOR", faction = "Alliance" })
 assert(raidRows[1] and raidRows[1].raidQuest, "a quest that plays in a raid is a raid source")
 
+-- AllTheThings dungeon data: bosses without ForeverDB spawns, loot without recorded drops, entrances.
+local att = { instances = { { id = 2970, name = "The Drowned City", level = 35, area = 16550, entrance = { 1434, 21.5, 27.8 },
+    bosses = { { name = "Zul'Alai", npcs = { 900 }, items = { 700, 701 } }, { name = "Tide Lord", npcs = { 901 }, items = { 702 } } } } } }
+local attDb = {
+    item = { [700] = { "Tide Robe", 3, 33, 38, 4, 1, 20 }, [701] = { "Drowned Staff", 3, 33, 38, 2, 10, 17 },
+        [702] = { "Coral Ring", 3, 33, 38, 4, 0, 11 } },
+    npc = { [900] = { "Zul'Alai", "", 36, 36, 1 } }, drop = { [700] = { 900, 0 }, [702] = { 901, 2500 } },
+    dng = { [16550] = { "The Drowned City" } },
+}
+local attRows = S.Build(attDb, { class = "MAGE", faction = "Alliance", att = att })
+local byItem = {}
+for _, r in ipairs(attRows) do byItem[r.itemID] = r end
+assert(byItem[700] and byItem[700].name == "The Drowned City" and byItem[700].forever and not byItem[700].chance
+    and math.abs(byItem[700].estimate - 0.5) < 1e-9, "unknown rate gets the loot table share")
+assert(byItem[701] and byItem[701].boss == "Zul'Alai" and byItem[701].level == 35 and byItem[701].estimate, "ATT-only loot")
+assert(byItem[702] and byItem[702].chance == 0.25 and not byItem[702].estimate, "known rate, boss found via ATT")
+local none = S.Build(attDb, { class = "MAGE", faction = "Alliance" })
+assert(#none == 0, "without ATT the bosses have no dungeon")
+local attSources = S.ItemSources(attDb, 701, { att = att })
+assert(attSources[1] and attSources[1].kind == "dungeon" and attSources[1].estimate == 0.5)
+local attDoor = S.Entrance(attDb, "The Drowned City", att)
+assert(attDoor and attDoor.map == 1434 and math.abs(attDoor.x - 0.215) < 1e-9)
+
+-- The generated file loads and covers the new Forever dungeons.
+local data = {}
+assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)
+local ids = {}
+for _, inst in ipairs(data.DungeonData.instances) do
+    ids[inst.id] = inst
+    for _, boss in ipairs(inst.bosses) do assert(#boss.npcs > 0, inst.name) end
+end
+for _, id in ipairs({ 2970, 2994, 2998, 2999, 3039, 3065 }) do assert(ids[id] and #ids[id].bosses > 0, "dungeon " .. id) end
+
 print("GearPilot checks passed")

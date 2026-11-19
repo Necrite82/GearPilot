@@ -16,6 +16,7 @@ Locale.lua
 Style.lua
 Stats.lua
 Planner.lua
+Data\Dungeons.lua
 Sources.lua
 Route.lua
 Client.lua

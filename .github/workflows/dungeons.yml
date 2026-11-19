@@ -1,0 +1,79 @@
+name: Dungeon data (AllTheThings)
+
+# Fetches AllTheThings' WoW Forever dungeon and raid files (MIT), rebuilds GearPilotPro/Data/Dungeons.lua and the
+# install archive, and proposes changes as one pull request into main (branch data/dungeons). Nothing is merged
+# automatically. A new ATT commit alone (same bosses and loot) opens no pull request.
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - tools/dungeons/**
+      - .github/workflows/dungeons.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dungeons
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Fetch AllTheThings
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/dungeons/fetch_att.py --out "$RUNNER_TEMP/att"
+
+      - name: Build and check
+        run: |
+          set -e
+          commit=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['commit'][:10])" "$RUNNER_TEMP/att/att.json")
+          lua5.1 tools/dungeons/build.lua "$RUNNER_TEMP/att" GearPilotPro/Data/Dungeons.lua "$commit" | tee "$RUNNER_TEMP/summary.txt"
+          luac5.1 -p GearPilotPro/Data/Dungeons.lua
+          lua5.1 tests/run.lua
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
+
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          file=GearPilotPro/Data/Dungeons.lua
+          # Only the source line changed: same data, nothing to propose.
+          if [ -z "$(git diff -U0 -- "$file" | grep '^[-+] ' | grep -v 'source = ')" ]; then
+            echo "Dungeon data unchanged"; git checkout -- "$file"; exit 0
+          fi
+          python3 tools/build_release.py
+          stat=$(git diff --stat -- "$file" | tail -1)
+          branch="data/dungeons"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A "$file" dist
+          git commit -qm "Dungeondaten: AllTheThings $COMMIT"
+          git push -q --force -u origin "$branch"
+          {
+            echo "Dungeondaten neu aus AllTheThings (Commit \`$COMMIT\`, MIT): Instanzen, Bosse und ihre Beute für WoW Forever."
+            echo
+            echo "- $(cat "$RUNNER_TEMP/summary.txt")"
+            echo "- $stat"
+            echo
+            echo "Automatisch erzeugt von \`.github/workflows/dungeons.yml\`. Vor dem Mergen Stichproben im Spiel prüfen."
+          } > "$RUNNER_TEMP/body.md"
+          if gh pr view "$branch" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$branch" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head "$branch" --base main --title "Dungeondaten: AllTheThings $COMMIT" --body-file "$RUNNER_TEMP/body.md"
+          fi

@@ -87,8 +87,38 @@ local function replaced(db, older, newer)
 end
 Sources.Replaced = replaced
 
--- Where an NPC lives: a Forever dungeon (ForeverDB "ind") or a Classic instance map (spawn coordinates).
-local function dungeonOf(db, npcID)
+-- AllTheThings' boss lists (Data/Dungeons.lua): creature -> instance and item -> { instance, boss }.
+-- They fill in what ForeverDB lacks: bosses of the new Forever dungeons without spawn data, and boss loot
+-- without recorded drops.
+local function attIndex(data)
+    if type(data) ~= "table" then return nil end
+    if data.index then return data.index end
+    local npcs, items = {}, {}
+    for _, instance in ipairs(data.instances or {}) do
+        for _, boss in ipairs(instance.bosses or {}) do
+            for _, npcID in ipairs(boss.npcs or {}) do npcs[npcID] = npcs[npcID] or instance end
+            for _, itemID in ipairs(boss.items or {}) do
+                items[itemID] = items[itemID] or {}
+                table.insert(items[itemID], { instance = instance, boss = boss })
+            end
+        end
+    end
+    data.index = { npcs = npcs, items = items }
+    return data.index
+end
+Sources.AttIndex = attIndex
+
+-- An ATT instance as a dungeon source: ForeverDB's area name where it has one (names group dungeons).
+local function attDungeon(db, instance)
+    local area = instance.area
+    local entry = area and ((db.dng and db.dng[area]) or (db.area and db.area[area]))
+    return "a" .. (area or ("i" .. instance.id)), entry and entry[1] or instance.name, instance.raid == true,
+        instance.id > 1000
+end
+
+-- Where an NPC lives: a Forever dungeon (ForeverDB "ind"), a Classic instance map (spawn coordinates) or,
+-- failing both, AllTheThings' boss list.
+local function dungeonOf(db, npcID, att)
     local key = "c" .. npcID
     local inside = db.ind and db.ind[key]
     if inside and not notDungeons[inside[1]] then
@@ -101,7 +131,15 @@ local function dungeonOf(db, npcID)
         local instance = Sources.instances[spawn[1]]
         if instance then return "m" .. spawn[1], instance[1], instance[2] == true, false, spawn[1] end
     end
+    local instance = att and att.npcs[npcID]
+    if instance then return attDungeon(db, instance) end
     return nil
+end
+
+-- Boss name for a drop: ForeverDB's creature name, else ATT's.
+local function bossName(db, npcID, boss)
+    local npc = db.npc and db.npc[npcID]
+    return npc and npc[1] or (boss and boss.name)
 end
 
 -- Equipment the player's class can wear or wield: armor (4) and weapons (2), quality above poor.
@@ -116,12 +154,13 @@ local function equippable(item, class)
 end
 
 -- Returns rows: { itemID, source = "Quests"|"Dungeons", sourceID, level, name, faction, prerequisites,
--- choiceGroup, giver, zone, chance (0..1, nil unknown), boss, raid, forever }.
--- options: { class, faction, minChance (0..1) }
+-- choiceGroup, giver, zone, chance (0..1, nil unknown), estimate (0..1, ATT loot table share), boss, raid,
+-- forever }. options: { class, faction, minChance (0..1), raceBit, att (GP.DungeonData) }
 function Sources.Build(db, options)
     local rows = {}
     local class, faction, raceBit = options.class, options.faction, options.raceBit
     local minChance = (options.minChance or 0.02) * 10000
+    local att = attIndex(options.att)
     for itemID, quests in pairs(db.rew or {}) do
         local item = db.item and db.item[itemID]
         if equippable(item, class) then
@@ -169,20 +208,41 @@ function Sources.Build(db, options)
             end
         end
     end
-    for itemID, list in pairs(db.drop or {}) do
+    -- Dropped items: ForeverDB's drop table plus boss loot only AllTheThings lists.
+    local dropped = {}
+    for itemID in pairs(db.drop or {}) do dropped[itemID] = true end
+    for itemID in pairs(att and att.items or {}) do dropped[itemID] = true end
+    for itemID in pairs(dropped) do
+        local list = db.drop and db.drop[itemID] or {}
         local item = db.item and db.item[itemID]
         if equippable(item, class) then
-            local best = {}
+            -- One row per dungeon (by name: ForeverDB and ATT may use two areas for one dungeon).
+            local best, recorded = {}, {}
             for i = 1, #list, 2 do
                 local npcID, chance = list[i], list[i + 1] or 0
-                local key, name, raid, forever, mapID = dungeonOf(db, npcID)
+                local key, name, raid, forever, mapID = dungeonOf(db, npcID, att)
                 -- Known rate at least minChance; unknown rate (0) only for Forever dungeons and elite bosses.
                 local npc = db.npc and db.npc[npcID]
                 local rank = npc and npc[5] or 0
-                local accepted = key and (chance >= minChance or (chance == 0 and (forever or rank >= 1)))
-                if accepted and (not best[key] or chance > best[key].chance) then
-                    best[key] = { key = key, name = name, raid = raid, forever = forever, mapID = mapID,
+                local boss = att and att.npcs[npcID] and true
+                if key and chance > 0 then recorded[name] = true end
+                local accepted = key and (chance >= minChance or (chance == 0 and (forever or rank >= 1 or boss)))
+                if accepted and (not best[name] or chance > best[name].chance) then
+                    best[name] = { key = key, name = name, raid = raid, forever = forever, mapID = mapID,
                         npc = npc and npc[1], level = npc and (npc[4] or npc[3]), chance = chance }
+                end
+            end
+            -- Boss loot ATT knows: an unknown rate gets the boss's loot table share as estimate.
+            for _, found in ipairs(att and att.items[itemID] or {}) do
+                local key, name, raid, forever = attDungeon(db, found.instance)
+                local estimate = 1 / math.max(1, #found.boss.items)
+                local known = best[name]
+                -- A recorded rate below the minimum stays out; ATT only fills in unknown rates.
+                if not known and not recorded[name] then
+                    best[name] = { key = key, name = name, raid = raid, forever = forever, chance = 0, estimate = estimate,
+                        npc = bossName(db, found.boss.npcs[1], found.boss), level = found.instance.level }
+                elseif known and known.chance == 0 then
+                    known.estimate = estimate
                 end
             end
             for _, source in pairs(best) do
@@ -190,6 +250,7 @@ function Sources.Build(db, options)
                     itemID = itemID, source = "Dungeons", sourceID = source.key, level = source.level or item[3],
                     name = source.name, boss = source.npc, raid = source.raid, forever = source.forever,
                     mapID = source.mapID, chance = source.chance > 0 and source.chance / 10000 or nil,
+                    estimate = source.chance == 0 and source.estimate or nil,
                 }
             end
         end
@@ -251,6 +312,7 @@ end
 function Sources.ItemSources(db, itemID, options)
     options = options or {}
     local list = {}
+    local att = attIndex(options.att)
     local item = db.item and db.item[itemID]
     for _, questID in ipairs(db.rew and db.rew[itemID] or {}) do
         local quest = db.quest and db.quest[questID]
@@ -278,9 +340,9 @@ function Sources.ItemSources(db, itemID, options)
     for i = 1, #drops, 2 do
         local npcID, chance = drops[i], drops[i + 1] or 0
         local npc = db.npc and db.npc[npcID]
-        local key, name, raid, forever, mapID = dungeonOf(db, npcID)
+        local key, name, raid, forever, mapID = dungeonOf(db, npcID, att)
         if key then
-            local entry = dungeons[key]
+            local entry = dungeons[name]
             if not entry or chance > entry.rawChance then
                 local new = { kind = "dungeon", key = key, name = name, raid = raid, forever = forever, mapID = mapID,
                     boss = npc and npc[1], level = npc and (npc[4] or npc[3]), rawChance = chance,
@@ -288,7 +350,7 @@ function Sources.ItemSources(db, itemID, options)
                 if entry then
                     for k, v in pairs(new) do entry[k] = v end
                 else
-                    dungeons[key] = new
+                    dungeons[name] = new
                     list[#list + 1] = new
                 end
             end
@@ -296,6 +358,18 @@ function Sources.ItemSources(db, itemID, options)
             list[#list + 1] = { kind = "mob", npcRef = "c" .. npcID, name = npc[1], level = npc[4] or npc[3],
                 rank = npc[5], rawChance = chance, chance = chance > 0 and chance / 10000 or nil }
         end
+    end
+    for _, found in ipairs(att and att.items[itemID] or {}) do
+        local key, name, raid, forever = attDungeon(db, found.instance)
+        local estimate = 1 / math.max(1, #found.boss.items)
+        local entry = dungeons[name]
+        if not entry then
+            entry = { kind = "dungeon", key = key, name = name, raid = raid, forever = forever, rawChance = 0,
+                boss = bossName(db, found.boss.npcs[1], found.boss), level = found.instance.level }
+            dungeons[name] = entry
+            list[#list + 1] = entry
+        end
+        if not entry.chance then entry.estimate = estimate end
     end
     for _, npcID in ipairs(db.vend and db.vend[itemID] or {}) do
         local side = db.nfac and db.nfac[npcID]
@@ -333,10 +407,18 @@ function Sources.ItemSources(db, itemID, options)
 end
 
 -- Dungeon entrance on the map (uiMap, x, y in 0..1) by dungeon name, from ForeverDB's dng table.
-function Sources.Entrance(db, name)
+function Sources.Entrance(db, name, data)
     for _, entry in pairs(db.dng or {}) do
         if entry[1] == name and type(entry[3]) == "table" and entry[3][1] then
             return { world = false, map = entry[3][1], x = entry[3][2] / 1000, y = entry[3][3] / 1000 }
+        end
+    end
+    -- AllTheThings' entrance (percent coordinates), matched by its name or ForeverDB's name for its area.
+    data = data or GP.DungeonData
+    for _, instance in ipairs(type(data) == "table" and data.instances or {}) do
+        local entrance = instance.entrance
+        if entrance and (instance.name == name or select(2, attDungeon(db, instance)) == name) then
+            return { world = false, map = entrance[1], x = entrance[2] / 100, y = entrance[3] / 100 }
         end
     end
     return nil
@@ -417,9 +499,17 @@ function Sources.Rows(class, faction, minChance, raceBit)
     if Sources.rows and Sources.signature == signature then return Sources.rows end
     local db = Sources.Database()
     if not db then return nil end
-    Sources.rows = Sources.Build(db, { class = class, faction = faction, minChance = minChance, raceBit = raceBit })
+    Sources.rows = Sources.Build(db, { class = class, faction = faction, minChance = minChance, raceBit = raceBit,
+        att = GP.DungeonData })
     Sources.signature = signature
     return Sources.rows
+end
+
+-- "12 %", an ATT estimate "ca. 20 % (estimated)" or nil when nothing is known.
+function Sources.ChanceText(row)
+    if row and row.chance then return ("%d %%"):format(math.floor(row.chance * 100 + .5)) end
+    if row and row.estimate then return GP.L("ca. %d %% (estimated)"):format(math.floor(row.estimate * 100 + .5)) end
+    return nil
 end
 
 function Sources.BuildDate()

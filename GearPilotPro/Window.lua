@@ -882,7 +882,8 @@ local function sourceLine(entry)
     if entry.source == "Crafted" then
         return L(professionNames[row.profession] or row.profession) .. (row.learn and (" " .. row.learn) or "")
     end
-    local chance = row and row.chance and (" · %d %%"):format(math.floor(row.chance * 100 + .5)) or ""
+    local chance = GP.Sources.ChanceText(row)
+    chance = chance and (" · " .. chance) or ""
     return ("%s%s"):format(GP.Sources.DungeonName(row), chance)
 end
 
@@ -1013,7 +1014,7 @@ local function showUpgrade(result, profile)
     if result.second and result.second.name then replaced = replaced .. " + " .. result.second.name end
     local third
     if entry.source == "Dungeons" then
-        third = { label = L("Drop chance"), value = row.chance and (("%d %%"):format(math.floor(row.chance * 100 + .5))) or L("unknown") }
+        third = { label = L("Drop chance"), value = GP.Sources.ChanceText(row) or L("unknown") }
     elseif entry.source == "Auction" then
         third = { label = L("Auction price"), value = money(row.price), color = C.text }
     else
@@ -1060,6 +1061,7 @@ local function showUpgrade(result, profile)
         detailLine("GameFontHighlight", GP.Sources.DungeonName(row) .. (row.raid and (" (" .. L("raid") .. ")") or ""))
         if row.boss then detailLine("GameFontHighlightSmall", L("Drops from: ") .. row.boss) end
         detailLine("GameFontHighlightSmall", row.chance and (L("Drop chance about %d %%"):format(math.floor(row.chance * 100 + .5)))
+            or (row.estimate and L("Drop chance not recorded yet; estimated from the boss's loot table (AllTheThings): about %d %%."):format(math.floor(row.estimate * 100 + .5)))
             or L("Drop chance not known yet (new in Forever or too few kills recorded)."))
     end
     section(L("Values compared"))
@@ -1140,8 +1142,8 @@ local function showWeapons(data, profile)
     end
 end
 
-local function chanceLabel(chance)
-    return chance and (L("Drop chance") .. " " .. ("%d %%"):format(math.floor(chance * 100 + .5))) or (L("Drop chance") .. " " .. L("unknown"))
+local function chanceLabel(src)
+    return L("Drop chance") .. " " .. (GP.Sources.ChanceText(src) or L("unknown"))
 end
 local function showSources(id, item)
     section(L("Where to get it"))
@@ -1158,7 +1160,7 @@ local function showSources(id, item)
         elseif src.kind == "dungeon" then
             local entrance = db and GP.Sources.Entrance(db, src.name)
             sourceLine2("dungeon", GP.Sources.DungeonName(src) .. (src.raid and (" (" .. L("raid") .. ")") or ""),
-                (src.boss or "?") .. " · " .. chanceLabel(src.chance), entrance and L("Entrance") or nil,
+                (src.boss or "?") .. " · " .. chanceLabel(src), entrance and L("Entrance") or nil,
                 entrance and function() GP.Route.ToSpot(entrance, GP.Sources.DungeonName(src), src.boss) end or nil)
         elseif src.kind == "vendor" then
             sourceLine2("vendor", src.name, L("Vendor"), L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end)
@@ -1172,7 +1174,7 @@ local function showSources(id, item)
                     if cp.OpenItemInDB then pcall(cp.OpenItemInDB, cp, id) end
                 end or nil)
         elseif src.kind == "mob" then
-            sourceLine2("mob", src.name, L("Mob") .. (src.level and (" · " .. (L("Level %d")):format(src.level)) or "") .. " · " .. chanceLabel(src.chance),
+            sourceLine2("mob", src.name, L("Mob") .. (src.level and (" · " .. (L("Level %d")):format(src.level)) or "") .. " · " .. chanceLabel(src),
                 L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end)
         elseif src.kind == "world" then
             sourceLine2("world", L("World drop"), (L("from level %d")):format(src.level or 1))

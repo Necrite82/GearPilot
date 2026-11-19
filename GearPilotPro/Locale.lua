@@ -313,6 +313,10 @@ local de = {
     ["on wishlist"] = "auf Wunschliste",
     ["received"] = "erhalten",
     ["your profession"] = "dein Beruf",
+    -- 0.7.0 dungeons (AllTheThings)
+    ["ca. %d %% (estimated)"] = "ca. %d %% (geschätzt)",
+    ["Drop chance not recorded yet; estimated from the boss's loot table (AllTheThings): about %d %%."] =
+        "Dropchance noch nicht erfasst; geschätzt aus der Beutetabelle des Bosses (AllTheThings): etwa %d %%.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

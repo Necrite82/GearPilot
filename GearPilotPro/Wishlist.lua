@@ -89,7 +89,7 @@ function Wish.Sources(id)
     local player = GP.Player()
     local cp = GP.CraftPilot()
     return (GP.Sources.ItemSources(db, id, { faction = player.faction, raceBit = player.raceBit, class = player.class,
-        catalog = cp and cp.CatalogData }))
+        catalog = cp and cp.CatalogData, att = GP.DungeonData }))
 end
 
 -- Goals reached: "9 of 17 slots".

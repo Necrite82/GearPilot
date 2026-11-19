@@ -488,7 +488,7 @@ function Planner.ByZone(results)
 end
 
 -- Dungeon upgrades: per dungeon the expected gain of one run (gain x drop chance; an unknown chance counts
--- with UNKNOWN_CHANCE and is marked), its bosses and the dungeon quests with an upgrade.
+-- with its loot table estimate or UNKNOWN_CHANCE and is marked), its bosses and the dungeon quests with an upgrade.
 Planner.UNKNOWN_CHANCE = 0.1
 function Planner.ByDungeon(dropResults, questResults)
     local dungeons, list = {}, {}
@@ -502,7 +502,7 @@ function Planner.ByDungeon(dropResults, questResults)
             list[#list + 1] = entry
         end
         entry.results[#entry.results + 1] = result
-        entry.expected = entry.expected + result.gain * (row.chance or Planner.UNKNOWN_CHANCE)
+        entry.expected = entry.expected + result.gain * (row.chance or row.estimate or Planner.UNKNOWN_CHANCE)
         if not row.chance then entry.unknown = entry.unknown + 1 end
         entry.low = math.min(entry.low, row.level)
         entry.high = math.max(entry.high, row.level)
