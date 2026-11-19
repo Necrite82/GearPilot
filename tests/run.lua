@@ -447,6 +447,41 @@ local vendorNames = {}
 for _, src in ipairs(vendorList) do if src.kind == "vendor" then vendorNames[#vendorNames + 1] = src.name end end
 assert(#vendorNames == 1 and vendorNames[1] == "Quartermaster", "the boss is a drop, not a vendor")
 
+-- 1.3.0: quest route (available quests, zone choice by worth and way, order accept -> objectives -> turn in).
+assert(loadfile("GearPilotPro/QuestRoute.lua"))("GearPilotPro", GP)
+local QR = GP.QuestRoute
+local routeDb = {
+    quest = { [1] = { "Wolves", 20, 15 }, [2] = { "Follow-up", 21, 15 }, [3] = { "Far away", 20, 15 }, [4] = { "Grey", 10, 5 },
+        [5] = { "Talk task", 20, 15 }, [6] = { "Horde only", 20, 15 } },
+    qx = { [1] = { nil, nil, nil, nil, nil, nil, nil, { 100 }, nil, nil, 40 }, [2] = { nil, nil, { 1 }, nil, nil, nil, nil, nil, nil, nil, 40 },
+        [3] = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 33 }, [4] = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 40 },
+        [5] = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 40 }, [6] = { 2 ^ 1, nil, nil, nil, nil, nil, nil, nil, nil, nil, 40 } },
+    qg = { [1] = { "c10" }, [2] = { "c10" }, [3] = { "c30" }, [4] = { "c10" }, [5] = { "c11" }, [6] = { "c10" } },
+    qe = { [1] = { "c10" }, [2] = { "c10" }, [3] = { "c30" }, [4] = { "c10" }, [5] = { "c11" }, [6] = { "c10" } },
+    spw = { c10 = { { 0, 100, 100 } }, c11 = { { 0, 400, 100 } }, c30 = { { 0, 9000, 9000 } }, c100 = { { 0, 200, 200 }, { 0, 5000, 5000 } } },
+    npc = { [100] = { "Wolf" } }, area = { [40] = { "Westfall" }, [33] = { "Stranglethorn" } }, dng = {},
+    taxi = { [1] = { "Sentinel Hill, Westfall", 0, 120, 90, 0, 0, 0, 541 }, [2] = { "Grom'gol, Stranglethorn", 0, 110, 95, 0, 0, 2224, 0 } },
+}
+local routeCtx = { class = "WARRIOR", faction = "Alliance", raceBit = 1, level = 20, grey = 13, position = { 0, 90, 90 },
+    done = function() return false end, active = function() return false end, xp = function() return 1000 end }
+local plan = QR.Plan(routeDb, routeCtx)
+local ids = {}
+for _, q in ipairs(plan.quests) do ids[q.id] = true end
+assert(plan.zone.name == "Westfall" and ids[1] and ids[5] and not ids[2] and not ids[4] and not ids[6], "available quests of the best zone")
+assert(plan.next and plan.next.name == "Stranglethorn")
+local order = {}
+for i, t in ipairs(plan.tasks) do order[t.kind .. t.quest.id] = i end
+assert(order.accept1 < order.objective1 and order.objective1 < order.turnin1, "accept, objective, turn in")
+assert(order.turnin5 == #plan.tasks, "a quest with unknown objectives is turned in last")
+assert(plan.tasks[order.objective1].p[2] == 200, "the objective spawn nearest the giver")
+assert(QR.FlightPoint(routeDb, { 0, 100, 100 }, "Alliance") == "Sentinel Hill, Westfall"
+    and QR.FlightPoint(routeDb, { 0, 100, 100 }, "Horde") == "Grom'gol, Stranglethorn")
+routeCtx.done = function(id) return id == 1 end
+local after = QR.Plan(routeDb, routeCtx)
+local afterIds = {}
+for _, q in ipairs(after.quests) do afterIds[q.id] = true end
+assert(afterIds[2] and not afterIds[1], "the follow-up comes in once its prerequisite is done")
+
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)

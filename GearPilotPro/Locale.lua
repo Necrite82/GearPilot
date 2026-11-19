@@ -374,6 +374,23 @@ local de = {
     ["Recipe"] = "Rezept", ["Materials and cost"] = "Material und Kosten",
     ["CraftPilot works out the materials with the prices of your last auction house scan."] =
         "CraftPilot rechnet das Material mit den Preisen deines letzten Auktionshaus-Scans zusammen.",
+    -- 1.3.0 quest route
+    ["Quest route"] = "Questroute", ["The quests worth most at your level, in an order to do them"] = "Die lohnendsten Quests auf deiner Stufe, in einer Reihenfolge zum Abarbeiten",
+    ["Focus"] = "Fokus", ["Experience"] = "Erfahrung", ["Balanced"] = "Ausgewogen", ["Gear"] = "Ausrüstung",
+    ["Route"] = "Route", ["Go"] = "Los", ["Stop"] = "Stopp",
+    ["%d %% of this level"] = "%d %% dieser Stufe", ["%d m"] = "%d m", ["Accept"] = "Annehmen", ["Objective"] = "Ziel", ["Turn in"] = "Abgeben",
+    ["Best reward"] = "Beste Belohnung", ["Quest level"] = "Questlevel",
+    ["Nearest flight point of your faction: "] = "Nächster Flugpunkt deiner Fraktion: ",
+    ["No quests worth doing found near your level. Grey quests and quests you have done are left out."] =
+        "Keine lohnenden Quests auf deiner Stufe gefunden. Graue und erledigte Quests sind ausgelassen.",
+    ["Quest route %d of %d: "] = "Questroute %d von %d: ",
+    ["Quest route: nothing left here. Open the route for the next zone."] = "Questroute: hier ist alles erledigt. Öffne die Route für das nächste Gebiet.",
+    ["The quests here are worth more than those nearby, even with the way there."] = "Die Quests dort lohnen sich mehr als die in der Nähe, auch mit dem Weg dorthin.",
+    ["The route moves on when the quest is complete or when you reach this place."] = "Die Route geht weiter, wenn die Quest abgeschlossen ist oder du diesen Ort erreichst.",
+    ["Travel to "] = "Reise nach ", ["Where: "] = "Wo: ", ["about %d m away"] = "ca. %d m entfernt",
+    ["enough for level %d + %d %%"] = "reicht bis Stufe %d + %d %%", ["flight point: "] = "Flugpunkt: ", ["then: "] = "danach: ",
+    ["Quest route: the quests worth most at your level (experience plus the upgrade value of their rewards) in the zone that pays most for the way there, in an order: accept, objectives, turn in, nearest first. Go sets the waypoint to the next step and moves on by itself; the route follows your level and shows the next zone when this one runs dry."] =
+        "Questroute: die lohnendsten Quests auf deiner Stufe (Erfahrung plus Upgrade-Wert der Belohnungen) im Gebiet, das sich mit dem Weg dorthin am meisten lohnt, in einer Reihenfolge: annehmen, Ziele, abgeben, das Nächste zuerst. „Los“ setzt den Wegpunkt zum nächsten Schritt und rückt von selbst weiter; die Route folgt deiner Stufe und zeigt das nächste Gebiet, wenn dieses ausgeschöpft ist.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key
