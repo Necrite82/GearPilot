@@ -1,0 +1,12 @@
+package-as: GearPilotPro
+
+move-folders:
+  GearPilotPro/GearPilotPro: GearPilotPro
+
+required-dependencies:
+  - forever-db
+
+ignore:
+  - tests
+  - .github
+  - README.md

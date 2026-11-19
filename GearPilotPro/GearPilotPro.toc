@@ -1,0 +1,17 @@
+## Interface: 16001
+## Title: GearPilot
+## Notes: Gear upgrades from your bags, quest rewards and dungeon drops for World of Warcraft: Forever.
+## Notes-deDE: Ausrüstungs-Upgrades aus Taschen, Quest-Belohnungen und Dungeon-Beute für World of Warcraft: Forever.
+## Version: 0.2.0-dev.1
+## OptionalDeps: ForeverDB
+## SavedVariablesPerCharacter: GearPilotProSettings
+## X-License: GPL-3.0
+## X-Website: https://github.com/Necrite82/GearPilot
+
+Locale.lua
+Style.lua
+Stats.lua
+Planner.lua
+Sources.lua
+Client.lua
+Window.lua
