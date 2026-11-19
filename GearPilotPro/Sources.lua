@@ -162,7 +162,56 @@ function Sources.Build(db, options)
             end
         end
     end
+    -- Vendors: every equippable item a vendor sells; vendors of the other faction are left out.
+    for itemID, vendors in pairs(db.vend or {}) do
+        local item = db.item and db.item[itemID]
+        if equippable(item, class) then
+            local list = {}
+            for _, npcID in ipairs(vendors) do
+                local side = db.nfac and db.nfac[npcID]
+                local friendly = not side or not faction or side == "AH"
+                    or (faction == "Alliance" and side == "A") or (faction == "Horde" and side == "H")
+                local npc = db.npc and db.npc[npcID]
+                if friendly and npc then list[#list + 1] = { ref = "c" .. npcID, name = npc[1] } end
+            end
+            if #list > 0 then
+                rows[#rows + 1] = { itemID = itemID, source = "Vendors", sourceID = "v" .. itemID, level = item[3] or 1,
+                    name = list[1].name, vendors = list }
+            end
+        end
+    end
     return rows
+end
+
+-- Crafted gear from CraftPilot's recipe catalog (CraftPilotPro.CatalogData): one row per recipe whose product
+-- the class can equip. level = the product's required level.
+function Sources.Crafted(catalog, db, class)
+    local rows = {}
+    for profession, data in pairs(catalog or {}) do
+        for recipeID, recipe in pairs(type(data) == "table" and data.recipes or {}) do
+            local itemID = recipe.makes
+            local item = itemID and db.item and db.item[itemID]
+            if equippable(item, class) then
+                rows[#rows + 1] = { itemID = itemID, source = "Crafted", sourceID = profession .. ":" .. recipeID,
+                    level = item[3] or 1, name = recipe.name, profession = profession, recipeID = recipeID,
+                    learn = recipe.learn, forever = recipe.forever }
+            end
+        end
+    end
+    return rows
+end
+
+-- Equippable items by required level, for the auction house search.
+function Sources.EquipIndex(db, class)
+    local index = {}
+    for itemID, item in pairs(db.item or {}) do
+        if equippable(item, class) then
+            local level = item[3] or 1
+            index[level] = index[level] or {}
+            table.insert(index[level], itemID)
+        end
+    end
+    return index
 end
 
 -- Quest chain: every prerequisite (recursively), earliest first, ending with the quest itself.

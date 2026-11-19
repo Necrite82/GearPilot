@@ -94,6 +94,50 @@ function Route.ToChain(questID)
     Route.Next(true)
 end
 
+-- Several quests (a zone, a dungeon): every open quest giver, nearest first.
+function Route.ToMany(questIDs)
+    local open, seen = {}, {}
+    for _, id in ipairs(questIDs) do
+        if not seen[id] then
+            seen[id] = true
+            local step = Route.Step(id)
+            if step and not step.done and not step.active then
+                step.distance = S.Distance(step.spot) or math.huge
+                open[#open + 1] = step
+            end
+        end
+    end
+    table.sort(open, function(a, b) return a.distance < b.distance end)
+    if #open == 0 then
+        say(L("Every quest of this chain is done or already in your quest log."))
+        return
+    end
+    if tomtom() then
+        local placed = 0
+        for _, step in ipairs(open) do
+            if place(step) then placed = placed + 1 end
+        end
+        say((L("%d waypoints set (TomTom)."):format(placed)))
+        return
+    end
+    for i, step in ipairs(open) do step.index, step.total = i, #open end
+    Route.queue = open
+    Route.Next(true)
+end
+
+-- Waypoint to an NPC (a vendor).
+function Route.ToNPC(ref, title)
+    Route.queue = nil
+    local spot = ForeverDB and S.Spot(ForeverDB, ref)
+    local uiMap, x, y = S.MapPoint(spot)
+    local step = { title = title, giver = S.GiverName(ForeverDB or {}, ref), uiMap = uiMap, x = x, y = y, zone = S.MapName(uiMap) }
+    if place(step) then
+        say(L("Waypoint: ") .. describe(step))
+    else
+        say(L("No position known for this quest giver."))
+    end
+end
+
 -- Game waypoint: next open step of the queue.
 function Route.Next(announce)
     local queue = Route.queue

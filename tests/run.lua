@@ -1,6 +1,6 @@
 -- Offline checks: lua5.1 tests/run.lua
 local GP = {}
-for _, file in ipairs({ "Stats", "Planner", "Sources" }) do
+for _, file in ipairs({ "Stats", "Planner", "Sources", "Skills" }) do
     assert(loadfile("GearPilotPro/" .. file .. ".lua"))("GearPilotPro", GP)
 end
 local P, St, S = GP.Planner, GP.Stats, GP.Sources
@@ -173,5 +173,51 @@ local twinDb = { quest = { [286] = { "Return the Statuette" }, [98189] = { "Retu
     qx = { [5] = { nil, nil, nil, { 286, 98189 } } } }
 assert(table.concat(S.Chain(twinDb, 5), ",") == "98189,5", "Classic twin dropped from the chain")
 assert(S.GiverName({ obj = { [9] = { "Wanted Poster" } } }, "o9") == "Wanted Poster")
+
+-- Mail and plate only from level 40: judged at the level you can wear the item, not the top of the range.
+local hunt = { level = 38, below = 2, above = 3, profile = P.Profile("ranged"), class = "HUNTER" }
+local mail35 = row("mail 35", "Quests", 40, item(80, { AGI = 20 }, 35, "INVTYPE_CHEST", 4, 3))
+local mail41 = row("mail 41", "Quests", 41, item(81, { AGI = 20 }, 41, "INVTYPE_LEGS", 4, 3))
+local leather = row("leather", "Quests", 39, item(82, { AGI = 5 }, 37, "INVTYPE_FEET", 4, 2))
+local picks = P.Recommend({ mail35, mail41, leather }, {}, hunt)
+local keys = {}
+for _, r in ipairs(picks) do keys[r.entry.key] = true end
+assert(not keys["mail 35"], "level 38 hunter: no mail before 40")
+assert(keys["mail 41"] and keys["leather"], "mail that needs level 41 is fine, leather always")
+local plate = item(83, { STR = 20 }, 30, "INVTYPE_CHEST", 4, 4)
+assert(P.Compare(plate, {}, P.Profile("melee-str"), "WARRIOR", 39).usable == false)
+assert(P.Compare(plate, {}, P.Profile("melee-str"), "WARRIOR", 40).usable)
+assert(P.Compare(plate, {}, P.Profile("melee-str"), "PALADIN", 40).usable)
+assert(P.Compare(item(84, { INT = 5 }, 45, "INVTYPE_CHEST", 4, 3), {}, P.Profile("caster"), "SHAMAN", 39).usable, "mail with level 45 for a shaman")
+assert(P.Compare(item(85, { INT = 5 }, 30, "INVTYPE_CHEST", 4, 3), {}, P.Profile("caster"), "SHAMAN", 39).usable == false)
+assert(P.Compare(item(86, { INT = 5 }, 30, "INVTYPE_CHEST", 4, 3), {}, P.Profile("caster"), "DRUID", 60).usable == false, "druids never wear mail")
+assert(P.HeavyArmor(plate, "WARRIOR") and not P.HeavyArmor(plate, "ROGUE"))
+
+-- New 0.4.0 helpers
+local pawn = P.ParsePawn('( Pawn: v1: "Fury": Class=Warrior, Strength=2.00, Agility=1.40, Ap=1.00, HitRating=20.0, Dps=8.0 )')
+assert(pawn.STR == 1 and math.abs(pawn.AGI - 0.7) < 1e-9 and pawn.HIT == 10 and pawn.DPS == 4 and pawn.AP == 0.5)
+assert(P.ParsePawn("nothing here") == nil)
+P.SetCustom({ STR = 1, STA = 0.5 })
+assert(P.Profile("custom").STR == 1 and #P.All() == #P.profiles + 1)
+assert(P.SpecProfile("PALADIN", 2) == "tank" and P.SpecProfile("PRIEST", 3) == "caster" and P.SpecProfile("MAGE", nil) == "caster")
+local function res(zone, gain, dungeonQuest, chance, name, boss)
+    return { gain = gain, item = { quality = 2, name = "x" }, entry = { row = { zone = zone, dungeonQuest = dungeonQuest,
+        chance = chance, name = name, level = 20, boss = boss } } }
+end
+local zones = P.ByZone({ res("Westfall", 5), res("Duskwood", 8), res("Westfall", 6) })
+assert(zones[1].zone == "Westfall" and zones[1].gain == 11 and #zones[1].results == 2)
+local dungeons = P.ByDungeon({ res(nil, 10, nil, 0.2, "The Deadmines", "VanCleef"), res(nil, 10, nil, nil, "Hall", "Durgen") },
+    { res(nil, 3, "The Deadmines") })
+assert(dungeons[1].name == "The Deadmines" and math.abs(dungeons[1].expected - 5) < 1e-9 and #dungeons[1].quests == 1)
+assert(dungeons[2].unknown == 1 and math.abs(dungeons[2].expected - 10 * P.UNKNOWN_CHANCE) < 1e-9)
+local worn2 = { [5] = item(90, { AGI = 10 }) }
+local clutter = P.Clutter({ { key = "a", item = item(91, { AGI = 3 }) }, { key = "b", item = item(92, { AGI = 30 }) },
+    { key = "c", item = item(93, { AGI = 3 }, 10, nil, 4, 4) }, { key = "d", item = item(94, { AGI = 1 }) } },
+    worn2, melee, "ROGUE", 20, { [94] = { kind = "plan" } })
+local reasons = {}
+for _, c in ipairs(clutter) do reasons[c.key] = c.reason end
+assert(reasons.a == "worse" and not reasons.b and reasons.c == "unusable" and not reasons.d, "reserved items stay")
+local skills, anySkill = GP.Skills.Parse({ { "Schwerter", 45, 110 }, { "Defense", 100, 110 }, { "Bows", 80, 110 } })
+assert(anySkill and skills[7].rank == 45 and skills[2].rank == 80 and not skills[4])
 
 print("GearPilot checks passed")

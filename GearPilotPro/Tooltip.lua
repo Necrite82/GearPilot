@@ -21,7 +21,7 @@ local function annotate(tooltip, link)
     local item = GP.ItemData(link)
     if not item or not item.name then return end
     local player = GP.Player()
-    local profile = P.Profile(GP.settings.profile)
+    local profile = GP.ActiveProfile()
     local result = P.Compare(item, GP.ReadGear(), profile, player.class, player.level)
     if not result then return end
     if result.usable == false then
@@ -30,6 +30,8 @@ local function annotate(tooltip, link)
         local text, r, g, b = format(result)
         if not text then return end
         tooltip:AddDoubleLine("GearPilot · " .. L(profile.name), text, .88, .69, .31, r, g, b)
+        local note = not result.worn and GP.Skills.Note(item)
+        if note then tooltip:AddLine(note, .92, .66, .35, true) end
     end
     tooltip:Show()
 end

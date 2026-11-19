@@ -23,11 +23,75 @@ Planner.defaultProfile = {
     WARRIOR = "melee-str", PALADIN = "melee-str", SHAMAN = "melee-str", ROGUE = "melee-agi", DRUID = "melee-agi",
     HUNTER = "ranged", MAGE = "caster", WARLOCK = "caster", PRIEST = "caster",
 }
+-- The player's own profile (weights edited in game or imported from Pawn / WoWSims).
+Planner.custom = nil
+function Planner.SetCustom(weights)
+    local profile = { key = "custom", name = "Own profile" }
+    for key, value in pairs(weights or {}) do
+        if type(value) == "number" and value ~= 0 then profile[key] = value end
+    end
+    Planner.custom = profile
+    return profile
+end
+function Planner.All()
+    local list = {}
+    for _, profile in ipairs(Planner.profiles) do list[#list + 1] = profile end
+    if Planner.custom then list[#list + 1] = Planner.custom end
+    return list
+end
 function Planner.Profile(key)
+    if key == "custom" and Planner.custom then return Planner.custom end
     for _, profile in ipairs(Planner.profiles) do
         if profile.key == key then return profile end
     end
     return Planner.profiles[1]
+end
+
+-- Specialization -> profile (Forever has three per class; a fourth for druids is the healer).
+Planner.specProfiles = {
+    WARRIOR = { "melee-str", "melee-str", "tank" }, PALADIN = { "healer", "tank", "melee-str" },
+    HUNTER = { "ranged", "ranged", "ranged" }, ROGUE = { "melee-agi", "melee-agi", "melee-agi" },
+    PRIEST = { "healer", "healer", "caster" }, SHAMAN = { "caster", "melee-str", "healer" },
+    MAGE = { "caster", "caster", "caster" }, WARLOCK = { "caster", "caster", "caster" },
+    DRUID = { "caster", "melee-agi", "healer", "healer" },
+}
+function Planner.SpecProfile(class, spec)
+    local list = Planner.specProfiles[class]
+    return list and spec and list[spec] or Planner.defaultProfile[class]
+end
+
+-- Pawn scale strings, also WoWSims' Pawn export: ( Pawn: v1: "Name": Strength=1.00, Agility=0.80, ... )
+Planner.pawnKeys = {
+    strength = "STR", agility = "AGI", stamina = "STA", intellect = "INT", spirit = "SPI", armor = "ARMOR",
+    dps = "DPS", meleedps = "DPS", rangeddps = "RDPS", wanddps = "WAND", ap = "AP", rap = "RAP",
+    spelldamage = "SP", spellpower = "SP", healing = "HEAL", mp5 = "MP5", hp5 = "HP5",
+    critrating = "CRIT", crit = "CRIT", hitrating = "HIT", hit = "HIT", spellcritrating = "SCRIT", spellcrit = "SCRIT",
+    spellhitrating = "SHIT", spellhit = "SHIT", defenserating = "DEF", defense = "DEF", dodgerating = "DODGE",
+    dodge = "DODGE", parryrating = "PARRY", parry = "PARRY", blockrating = "BLOCK", block = "BLOCK",
+    blockvalue = "BLOCKVAL", hasterating = "HASTE", haste = "HASTE",
+    firespelldamage = "SCHOOL", frostspelldamage = "SCHOOL", shadowspelldamage = "SCHOOL",
+    arcanespelldamage = "SCHOOL", naturespelldamage = "SCHOOL", holyspelldamage = "SCHOOL",
+}
+function Planner.ParsePawn(text)
+    if type(text) ~= "string" then return nil end
+    local weights, found = {}, 0
+    for name, value in text:gmatch("([%a]+)%s*=%s*(%-?[%d%.]+)") do
+        local key = Planner.pawnKeys[name:lower()]
+        local number = tonumber(value)
+        if key and number then
+            weights[key] = key == "SCHOOL" and math.max(weights[key] or 0, number) or number
+            found = found + 1
+        end
+    end
+    if found == 0 then return nil end
+    -- Pawn scales often weight Strength at 1 and the rest relative to it: normalize so the largest weight
+    -- of a main stat is 1 and the scores stay comparable with the built-in profiles.
+    local top = 0
+    for _, key in ipairs({ "STR", "AGI", "INT", "SP", "HEAL", "STA" }) do top = math.max(top, weights[key] or 0) end
+    if top > 0 then
+        for key, value in pairs(weights) do weights[key] = value / top end
+    end
+    return weights
 end
 
 Planner.slots = {
@@ -58,6 +122,7 @@ Planner.inventoryTypes = {
 }
 
 -- Classic proficiencies (Forever keeps the Classic ones). Armor: 1 cloth, 2 leather, 3 mail, 4 plate.
+-- Hunters and shamans wear mail, warriors and paladins plate only from level 40 (learned at the class trainer).
 local classArmor = { WARRIOR = 3, PALADIN = 3, SHAMAN = 2, HUNTER = 2, ROGUE = 2, DRUID = 2, MAGE = 1, PRIEST = 1, WARLOCK = 1 }
 local shields = { WARRIOR = true, PALADIN = true, SHAMAN = true }
 local relics = { PALADIN = 7, DRUID = 8, SHAMAN = 9 }
@@ -81,6 +146,13 @@ local weapons = {
 }
 local function dualWield(class, level)
     return (class == "ROGUE" and level >= 10) or ((class == "WARRIOR" or class == "HUNTER") and level >= 20)
+end
+
+Planner.HEAVY_ARMOR_LEVEL = 40
+function Planner.HeavyArmor(item, class)
+    local base = classArmor[class]
+    return item.classID == 4 and base and base < 4 and item.subclassID == base + 1
+        and (class == "WARRIOR" or class == "PALADIN" or class == "SHAMAN" or class == "HUNTER") or false
 end
 
 function Planner.CanUse(item, class, level)
@@ -144,9 +216,12 @@ function Planner.Recommend(candidates, equipped, options)
         local sourceLevel = entry.level or item.minLevel
         local inRange = bag or (sourceLevel and sourceLevel >= low and sourceLevel <= high)
         local targetLevel = bag and options.level or high
-        if item.equip == "INVTYPE_WEAPON" and dualWield(options.class, targetLevel) then slots = {16, 17} end
+        -- Proficiencies (mail and plate from level 40, dual wield) count from the level you can really wear the
+        -- item: your level now, or its required level if that is higher. Never the top of the level range.
+        local wearLevel = math.max(options.level, item.minLevel or options.level)
+        if item.equip == "INVTYPE_WEAPON" and dualWield(options.class, wearLevel) then slots = {16, 17} end
         if slots and inRange and item.minLevel and item.minLevel <= targetLevel
-            and Planner.CanUse(item, options.class, targetLevel) then
+            and Planner.CanUse(item, options.class, wearLevel) then
             local score = Planner.Score(item, options.profile)
             local unique = (item.equip == "INVTYPE_FINGER" or item.equip == "INVTYPE_TRINKET") and item.id
             local duplicate = unique and slots and ((equipped[slots[1]] and equipped[slots[1]].id == item.id)
@@ -209,6 +284,88 @@ function Planner.Compare(item, equipped, profile, class, level)
     end
     if best and best.base > 0 then best.percent = best.gain / best.base * 100 end
     return best
+end
+
+-- Quest upgrades by zone: one entry per zone with the summed gain, best first.
+function Planner.ByZone(results)
+    local zones, list = {}, {}
+    for _, result in ipairs(results) do
+        local row = result.entry.row
+        local zone = row and row.zone or "?"
+        local entry = zones[zone]
+        if not entry then
+            entry = { key = "zone:" .. zone, zone = zone, results = {}, gain = 0 }
+            zones[zone] = entry
+            list[#list + 1] = entry
+        end
+        entry.results[#entry.results + 1] = result
+        entry.gain = entry.gain + result.gain
+    end
+    table.sort(list, function(a, b)
+        if a.gain ~= b.gain then return a.gain > b.gain end
+        return a.zone < b.zone
+    end)
+    return list
+end
+
+-- Dungeon upgrades: per dungeon the expected gain of one run (gain x drop chance; an unknown chance counts
+-- with UNKNOWN_CHANCE and is marked), its bosses and the dungeon quests with an upgrade.
+Planner.UNKNOWN_CHANCE = 0.1
+function Planner.ByDungeon(dropResults, questResults)
+    local dungeons, list = {}, {}
+    for _, result in ipairs(dropResults) do
+        local row = result.entry.row
+        local entry = dungeons[row.name]
+        if not entry then
+            entry = { key = "dungeon:" .. row.name, name = row.name, row = row, results = {}, quests = {}, expected = 0,
+                unknown = 0, low = row.level, high = row.level }
+            dungeons[row.name] = entry
+            list[#list + 1] = entry
+        end
+        entry.results[#entry.results + 1] = result
+        entry.expected = entry.expected + result.gain * (row.chance or Planner.UNKNOWN_CHANCE)
+        if not row.chance then entry.unknown = entry.unknown + 1 end
+        entry.low = math.min(entry.low, row.level)
+        entry.high = math.max(entry.high, row.level)
+    end
+    for _, result in ipairs(questResults or {}) do
+        local entry = dungeons[result.entry.row.dungeonQuest or ""]
+        if entry then
+            entry.quests[#entry.quests + 1] = result
+            entry.expected = entry.expected + result.gain
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.expected ~= b.expected then return a.expected > b.expected end
+        return a.name < b.name
+    end)
+    return list
+end
+
+-- Bag items worth getting rid of: gear the class cannot use, or that loses against what you wear in every
+-- slot it fits. Items another addon reserves (CraftPilot plans) are kept.
+function Planner.Clutter(bagItems, equipped, profile, class, level, reserved)
+    local list = {}
+    for _, entry in ipairs(bagItems) do
+        local item = entry.item
+        if not (reserved and item.id and reserved[item.id]) then
+            local result = Planner.Compare(item, equipped, profile, class, level)
+            if result and not result.worn then
+                local reason
+                if result.usable == false then
+                    reason = "unusable"
+                elseif result.gain and result.gain < 0 and (item.minLevel or 0) <= level then
+                    reason = "worse"
+                end
+                if reason then
+                    list[#list + 1] = { key = entry.key, entry = entry, item = item, reason = reason,
+                        gain = result.gain, percent = result.percent, slot = result.slot }
+                end
+            end
+        end
+    end
+    table.sort(list, function(a, b) return (a.item.sellPrice or 0) > (b.item.sellPrice or 0) end)
+    return list
 end
 
 -- Differences between two value tables, for the detail panel.

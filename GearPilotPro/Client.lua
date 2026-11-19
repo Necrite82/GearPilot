@@ -5,7 +5,7 @@ GP.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetada
     or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) or ""
 
 local function itemData(ref)
-    local name, link, quality, _, minLevel, _, _, _, equip, icon, _, classID, subclassID = C_Item.GetItemInfo(ref)
+    local name, link, quality, _, minLevel, _, _, _, equip, icon, sellPrice, classID, subclassID = C_Item.GetItemInfo(ref)
     if not name or not link then
         local id = type(ref) == "number" and ref or tonumber(tostring(ref):match("item:(%d+)"))
         if id and not pending[id] and not missing[id] then
@@ -16,7 +16,7 @@ local function itemData(ref)
     end
     local item = {
         name = name, link = link, id = tonumber(link:match("item:(%d+)")), quality = quality, minLevel = minLevel,
-        equip = equip, icon = icon, classID = classID, subclassID = subclassID,
+        equip = equip, icon = icon, classID = classID, subclassID = subclassID, sellPrice = sellPrice,
     }
     item.stats = GP.Stats.Read(link, item)
     return item
@@ -66,6 +66,27 @@ function GP.ReadCandidates(source, low, high)
     local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance)
     if not rows then return entries, false, "missing" end
     local db = ForeverDB
+    if source == "Crafted" then
+        local cp = GP.CraftPilot()
+        if not cp then return entries, false, "nocraftpilot" end
+        GP.craftedRows = GP.craftedRows or GP.Sources.Crafted(cp.CatalogData, db, player.class)
+        rows = GP.craftedRows
+    elseif source == "Auction" then
+        local price = GP.AuctionPrice
+        if not GP.HasAuctionPrices() then return entries, false, "noauction" end
+        GP.equipIndex = GP.equipIndex or GP.Sources.EquipIndex(db, player.class)
+        for level = low, high do
+            for _, itemID in ipairs(GP.equipIndex[level] or {}) do
+                local value = price(itemID)
+                if value and value > 0 then
+                    add({ source = source, sourceID = "a" .. itemID, level = level, price = value,
+                        row = { itemID = itemID, source = source, level = level, price = value },
+                        key = "Auction:" .. itemID }, itemID)
+                end
+            end
+        end
+        return entries, loading, "ready"
+    end
     local dungeonQuests = GP.settings.dungeonQuests
     for _, row in ipairs(rows) do
         local isDungeonQuest = row.dungeonQuest ~= nil
@@ -90,26 +111,102 @@ local function bounded(value, fallback, lower, upper)
     return math.max(lower, math.min(upper, math.floor(value)))
 end
 local chances = { [0.01] = true, [0.02] = true, [0.05] = true, [0.1] = true }
-local pages = { upgrades = true, quests = true, dungeons = true, bags = true, gear = true, settings = true, help = true }
+local pages = { upgrades = true, quests = true, dungeons = true, shop = true, bags = true, gear = true, settings = true, help = true }
 local function initialize()
     local player = GP.Player()
     local saved = type(GearPilotProSettings) == "table" and GearPilotProSettings or {}
     saved.below = bounded(saved.below, 2, 0, 10)
     saved.above = bounded(saved.above, 3, 0, 10)
+    if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.profile = P.Profile(saved.profile or P.defaultProfile[player.class]).key
     saved.minChance = chances[saved.minChance] and saved.minChance or 0.02
     saved.page = pages[saved.page] and saved.page or "upgrades"
     if saved.tooltip == nil then saved.tooltip = true end
+    if saved.autoProfile == nil then saved.autoProfile = true end
+    if saved.rewardHelp == nil then saved.rewardHelp = true end
+    if saved.rollHelp == nil then saved.rollHelp = true end
+    saved.include = type(saved.include) == "table" and saved.include or {}
+    for _, key in ipairs({ "Vendors", "Auction", "Crafted" }) do
+        if saved.include[key] == nil then saved.include[key] = true end
+    end
+    saved.views = type(saved.views) == "table" and saved.views or {}
+    saved.shopSource = saved.shopSource or "all"
+    if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"
     saved.dungeonQuests = (saved.dungeonQuests == "hide" or saved.dungeonQuests == "only") and saved.dungeonQuests or "show"
     GearPilotProSettings = saved
     GP.settings = saved
 end
 
+-- Other addons ------------------------------------------------------------------------------------------------
+function GP.CraftPilot()
+    local cp = rawget(_G, "CraftPilotPro")
+    if type(cp) == "table" and type(cp.CatalogData) == "table" then return cp end
+    return nil
+end
+-- Items CraftPilot keeps for plans, recipes and the raid stock.
+function GP.Reserved()
+    local cp = rawget(_G, "CraftPilotPro")
+    if type(cp) ~= "table" or type(cp.ReservedItems) ~= "function" then return nil end
+    local ok, items = pcall(cp.ReservedItems, cp)
+    return ok and type(items) == "table" and items or nil
+end
+function GP.HasAuctionPrices()
+    return type(Auctionator) == "table" and type(Auctionator.API) == "table" and type(Auctionator.API.v1) == "table"
+        and type(Auctionator.API.v1.GetAuctionPriceByItemID) == "function"
+end
+function GP.AuctionPrice(itemID)
+    if not GP.HasAuctionPrices() then return nil end
+    local ok, value = pcall(Auctionator.API.v1.GetAuctionPriceByItemID, "GearPilot", itemID)
+    return ok and type(value) == "number" and value or nil
+end
+-- Professions the character has, by CraftPilot key (blacksmithing, tailoring, ...).
+local professionKeys = {
+    [164] = "blacksmithing", [165] = "leatherworking", [197] = "tailoring", [202] = "engineering",
+    [171] = "alchemy", [333] = "enchanting",
+}
+function GP.Professions()
+    local known = {}
+    if not (GetProfessions and GetProfessionInfo) then return known end
+    for _, index in ipairs({ GetProfessions() }) do
+        if index then
+            local ok, name, _, rank, _, _, _, skillLine = pcall(GetProfessionInfo, index)
+            if ok and skillLine and professionKeys[skillLine] then known[professionKeys[skillLine]] = { name = name, rank = rank } end
+        end
+    end
+    return known
+end
+
+-- Specialization from the game: retail-style specializations, otherwise the talent tree with most points.
+function GP.Specialization()
+    if GetSpecialization then
+        local ok, spec = pcall(GetSpecialization)
+        if ok and type(spec) == "number" and spec > 0 then return spec end
+    end
+    if GetNumTalentTabs and GetTalentTabInfo then
+        local best, most = nil, 0
+        for tab = 1, GetNumTalentTabs() do
+            local values = { pcall(GetTalentTabInfo, tab) }
+            local points = type(values[4]) == "number" and values[4] or type(values[6]) == "number" and values[6] or 0
+            if points > most then best, most = tab, points end
+        end
+        return best
+    end
+    return nil
+end
+function GP.ActiveProfile()
+    local s = GP.settings
+    if s.autoProfile then
+        local player = GP.Player()
+        return P.Profile(P.SpecProfile(player.class, GP.Specialization()))
+    end
+    return P.Profile(s.profile)
+end
+
 local events = CreateFrame("Frame")
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "PLAYER_EQUIPMENT_CHANGED",
-    "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "ITEM_DATA_LOAD_RESULT",
+    "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "ITEM_DATA_LOAD_RESULT", "PLAYER_TALENT_UPDATE", "SKILL_LINES_CHANGED",
 }) do
     events:RegisterEvent(event)
 end
