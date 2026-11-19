@@ -482,6 +482,18 @@ local afterIds = {}
 for _, q in ipairs(after.quests) do afterIds[q.id] = true end
 assert(afterIds[2] and not afterIds[1], "the follow-up comes in once its prerequisite is done")
 
+-- 1.3.1: the reward at the end of a chain counts for its first quest; rewards come into the plan.
+local kids = QR.Children(routeDb)
+assert(kids[1] and kids[1][1] == 2)
+local chainGain, chainItem, chainQuest = QR.ChainReward(kids, 1, function(id) if id == 2 then return 12, { name = "Boots" } end return 0 end)
+assert(chainGain == 12 and chainItem.name == "Boots" and chainQuest == 2, "a chain leads to its reward")
+routeCtx.done = function() return false end
+routeCtx.gain = function(id) return QR.ChainReward(kids, id, function(q) if q == 2 then return 12, { name = "Boots" } end return 0 end) end
+local gearPlan = QR.Plan(routeDb, routeCtx)
+for _, q in ipairs(gearPlan.quests) do
+    if q.id == 1 then assert(q.gain == 12 and q.reward.name == "Boots" and q.rewardQuest == 2) end
+end
+
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)
