@@ -233,6 +233,7 @@ end
 
 -- candidates: { key, source, level?, choiceGroup?, item = {id, link, equip, minLevel, classID, subclassID, stats} }
 -- options: { level, below, above, profile, class }
+-- options: { level, below, above, profile, class, slotAllowed (optional: slot -> boolean) }
 function Planner.Recommend(candidates, equipped, options)
     local low, high = Planner.Range(options.level, options.below, options.above)
     local results, groups = {}, {}
@@ -256,10 +257,12 @@ function Planner.Recommend(candidates, equipped, options)
             local best
             if score and not duplicate then
                 for _, slot in ipairs(slots) do
+                    -- The slot filter applies before the best slot and the best reward of a quest are chosen.
+                    local allowed = not options.slotAllowed or options.slotAllowed(slot)
                     local base, current, second = baseline(slot, item, equipped, options.profile)
                     local worn = current and current.link and current.link == item.link
                     local inSlot = Planner.SlotScore(item, options.profile, slot)
-                    if base and not worn and inSlot > base and (not best or inSlot - base > best.gain) then
+                    if allowed and base and not worn and inSlot > base and (not best or inSlot - base > best.gain) then
                         best = { entry = entry, item = item, slot = slot, current = current, second = second,
                             gain = inSlot - base, score = inSlot }
                     end
@@ -365,22 +368,38 @@ end
 
 -- Best in slot, computed by GearPilot from a pool of { item, entry, key } with the weights of a profile:
 -- per slot the highest score; rings and trinkets the two best different items; weapons the better of the best
--- two-hand weapon and the best main + off hand (WeaponSets). Returns a list in slot order:
+-- two-hand weapon and the best main + off hand (WeaponSets). Two choice rewards of one quest are never both
+-- picked: the slot that loses least takes its next best item. Returns a list in slot order:
 -- { slot, item, entry, score }, slots without a usable item are left out.
-function Planner.BestInSlot(pool, profile, class, level, maxLevel)
+local function groupOf(candidate) return candidate and candidate.entry and candidate.entry.choiceGroup end
+-- Slot groups for choice conflicts: both rings count as one, both trinkets, main and off hand.
+local function slotGroup(slot)
+    if slot == 12 then return 11 elseif slot == 14 then return 13 elseif slot == 17 then return 16 end
+    return slot
+end
+local function selectBest(pool, profile, class, level, maxLevel, excluded)
     local best, pairs2 = {}, { [11] = {}, [13] = {} }
     local function usable(item)
         return item and item.stats and (item.minLevel or 0) <= (maxLevel or level)
             and Planner.CanUse(item, class, math.max(level, item.minLevel or 0))
     end
+    local function allowed(candidate, slot)
+        local group = groupOf(candidate)
+        return not (group and excluded[slot] and excluded[slot][group])
+    end
+    local weapons = {}
     for _, candidate in ipairs(pool) do
         local item = candidate.item
         local slots = usable(item) and targetSlots[item.equip]
         if slots then
             local slot = slots[1]
-            if slot == 11 or slot == 13 then
-                table.insert(pairs2[slot], { item = item, entry = candidate.entry, score = Planner.SlotScore(item, profile, slot) })
-            elseif slot ~= 16 and slot ~= 17 then
+            if slot == 16 or slot == 17 then
+                if allowed(candidate, 16) then weapons[#weapons + 1] = candidate end
+            elseif slot == 11 or slot == 13 then
+                if allowed(candidate, slot) then
+                    table.insert(pairs2[slot], { item = item, entry = candidate.entry, score = Planner.SlotScore(item, profile, slot) })
+                end
+            elseif allowed(candidate, slot) then
                 local score = Planner.SlotScore(item, profile, slot)
                 if not best[slot] or score > best[slot].score then
                     best[slot] = { slot = slot, item = item, entry = candidate.entry, score = score }
@@ -390,31 +409,85 @@ function Planner.BestInSlot(pool, profile, class, level, maxLevel)
     end
     for first, list in pairs(pairs2) do
         table.sort(list, function(a, b) return a.score > b.score end)
-        local taken = {}
+        local taken, takenGroup = {}, {}
         for _, choice in ipairs(list) do
-            local id = choice.item.id
-            if not (id and taken[id]) then
+            local id, group = choice.item.id, groupOf(choice)
+            if not (id and taken[id]) and not (group and takenGroup[group]) then
                 local slot = best[first] and first + 1 or first
                 best[slot] = { slot = slot, item = choice.item, entry = choice.entry, score = choice.score }
                 if id then taken[id] = true end
+                if group then takenGroup[group] = true end
                 if slot == first + 1 then break end
             end
         end
     end
-    local sets = Planner.WeaponSets(pool, {}, profile, class, level, maxLevel)
-    local weapons = sets.pair
-    if sets.twoHand and (not weapons or sets.twoHand.score >= weapons.score) then weapons = sets.twoHand end
-    if weapons then
-        best[16] = { slot = 16, item = weapons.main, entry = weapons.mainEntry, score = Planner.SlotScore(weapons.main, profile, 16) }
-        if weapons.off then
-            best[17] = { slot = 17, item = weapons.off, entry = weapons.offEntry, score = Planner.SlotScore(weapons.off, profile, 17) }
+    local sets = Planner.WeaponSets(weapons, {}, profile, class, level, maxLevel)
+    local pick = sets.pair
+    if sets.twoHand and (not pick or sets.twoHand.score >= pick.score) then pick = sets.twoHand end
+    if pick then
+        best[16] = { slot = 16, item = pick.main, entry = pick.mainEntry, score = Planner.SlotScore(pick.main, profile, 16) }
+        if pick.off then
+            best[17] = { slot = 17, item = pick.off, entry = pick.offEntry, score = Planner.SlotScore(pick.off, profile, 17) }
         end
+    end
+    return best
+end
+local function total(best)
+    local sum = 0
+    for _, pick in pairs(best) do sum = sum + (pick.score or 0) end
+    return sum
+end
+-- First choice group used by two slot groups, with those slot groups; nil without a conflict.
+local function conflict(best)
+    local seen = {}
+    for slot, pick in pairs(best) do
+        local group = pick.entry and pick.entry.choiceGroup
+        if group then
+            local slots = seen[group] or {}
+            seen[group] = slots
+            local key = slotGroup(slot)
+            local known = false
+            for _, other in ipairs(slots) do if other == key then known = true end end
+            if not known then slots[#slots + 1] = key end
+            if #slots > 1 then return group, slots end
+        end
+    end
+    return nil
+end
+function Planner.BestInSlot(pool, profile, class, level, maxLevel)
+    local excluded = {}
+    local best = selectBest(pool, profile, class, level, maxLevel, excluded)
+    for _ = 1, 30 do
+        local group, slots = conflict(best)
+        if not group then break end
+        -- Leave the group out of the slot where that costs least.
+        local chosen, chosenBest, chosenTotal
+        for _, slot in ipairs(slots) do
+            excluded[slot] = excluded[slot] or {}
+            excluded[slot][group] = true
+            local trial = selectBest(pool, profile, class, level, maxLevel, excluded)
+            local sum = total(trial)
+            if not chosenTotal or sum > chosenTotal then chosen, chosenBest, chosenTotal = slot, trial, sum end
+            excluded[slot][group] = nil
+        end
+        excluded[chosen][group] = true
+        best = chosenBest
     end
     local list = {}
     for _, slot in ipairs(Planner.slots) do
         if best[slot[1]] then list[#list + 1] = best[slot[1]] end
     end
     return list
+end
+
+-- Profile weights as text, for caches that depend on them.
+function Planner.Signature(profile)
+    local keys = {}
+    for key, value in pairs(profile or {}) do
+        if type(value) == "number" then keys[#keys + 1] = key .. "=" .. value end
+    end
+    table.sort(keys)
+    return (profile and profile.key or "") .. ":" .. table.concat(keys, ",")
 end
 
 -- Wishlist text for sharing: "GP1:" then item IDs separated by commas, "!" after the ID marks a goal.
@@ -449,16 +522,37 @@ function Planner.IsGrey(questLevel, playerLevel)
     return type(questLevel) == "number" and questLevel > 0 and questLevel <= Planner.GreyLevel(playerLevel)
 end
 
--- Chain status: a step before a done or accepted step counts as skipped when it is not done itself
--- (breadcrumbs and optional quests). Marks step.skipped; returns done count (skipped included) and next index.
+-- Chain status: a step that is not done counts as skipped (breadcrumbs, optional quests) when a done or
+-- accepted step builds on it. With step.pre (the prerequisites of each step, from Sources.Chain) only the
+-- real predecessors of your progress count, so an independent required quest stays open; without it every
+-- step before the last progress counts. Marks step.skipped; returns done count (skipped included), next index
+-- and whether the chain is begun.
 function Planner.ChainStatus(steps)
-    local lastProgress = 0
+    local lastProgress, byID, graph = 0, {}, true
     for i, step in ipairs(steps) do
         if step.done or step.active then lastProgress = i end
+        if step.id then byID[step.id] = step end
+        if type(step.pre) ~= "table" then graph = false end
+    end
+    local behind = {}
+    if graph then
+        local function mark(step, depth)
+            if depth > 30 then return end
+            for _, id in ipairs(step.pre) do
+                if not behind[id] then
+                    behind[id] = true
+                    if byID[id] then mark(byID[id], depth + 1) end
+                end
+            end
+        end
+        for _, step in ipairs(steps) do
+            if step.done or step.active then mark(step, 0) end
+        end
     end
     local done, nextIndex = 0, nil
     for i, step in ipairs(steps) do
-        step.skipped = not step.done and not step.active and i < lastProgress or nil
+        local before = graph and behind[step.id] or (not graph and i < lastProgress)
+        step.skipped = not step.done and not step.active and before or nil
         if step.done or step.skipped then done = done + 1
         elseif not step.active and not nextIndex then nextIndex = i end
     end
@@ -503,7 +597,8 @@ function Planner.ByDungeon(dropResults, questResults)
         end
         entry.results[#entry.results + 1] = result
         entry.expected = entry.expected + result.gain * (row.chance or row.estimate or Planner.UNKNOWN_CHANCE)
-        if not row.chance then entry.unknown = entry.unknown + 1 end
+        if not row.chance and not row.estimate then entry.unknown = entry.unknown + 1 end
+        if not row.chance and row.estimate then entry.estimated = (entry.estimated or 0) + 1 end
         entry.low = math.min(entry.low, row.level)
         entry.high = math.max(entry.high, row.level)
     end
@@ -536,7 +631,8 @@ function Planner.Clutter(bagItems, equipped, profile, class, level, reserved)
     local list = {}
     for _, entry in ipairs(bagItems) do
         local item = entry.item
-        if not (reserved and item.id and reserved[item.id]) then
+        local tool = GP.Stats and GP.Stats.IsTool and GP.Stats.IsTool(item)
+        if not (reserved and item.id and reserved[item.id]) and not tool then
             local result = Planner.Compare(item, equipped, profile, class, level)
             if result and not result.worn then
                 local reason

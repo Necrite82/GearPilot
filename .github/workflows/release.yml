@@ -1,12 +1,20 @@
 name: Release
 # Start it by hand (Actions > Release > Run workflow on main) or push a tag such as v1.0.0: tests, archive check,
 # GitHub release (the manual start creates the tag v<version from the TOC> itself) and CurseForge upload.
+# "Publish to" picks both, only GitHub (e.g. while CurseForge still moderates the project) or only CurseForge
+# (a later upload, or a retry after a failed upload). An existing GitHub release is kept, not an error.
 # Needs: "## Version: x.y.z" and "## X-Curse-Project-ID: <id>" in the TOC, dist/GearPilot-x.y.z.zip,
 # docs/RELEASE_x.y.z.md and the repository secret CF_API_TOKEN.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      target:
+        description: Publish to
+        type: choice
+        options: [GitHub and CurseForge, only GitHub, only CurseForge]
+        default: GitHub and CurseForge
 permissions:
   contents: write
 concurrency:
@@ -43,17 +51,19 @@ jobs:
           test -f "dist/GearPilot-$VERSION.zip" && test -f "docs/RELEASE_$VERSION.md"
           python3 tools/upload_curseforge.py "$TAG" --dry-run
       - name: Publish GitHub release
+        if: inputs.target != 'only CurseForge'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${TAG#v}"
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG exists already, kept"; exit 0; fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG exists already"; exit 1; fi
             gh release create "$TAG" "dist/GearPilot-$VERSION.zip" --target "$GITHUB_SHA" --title "GearPilot $VERSION" --notes-file "docs/RELEASE_$VERSION.md"
           else
             gh release create "$TAG" "dist/GearPilot-$VERSION.zip" --verify-tag --title "GearPilot $VERSION" --notes-file "docs/RELEASE_$VERSION.md"
           fi
       - name: Upload to CurseForge
+        if: inputs.target != 'only GitHub'
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: python3 tools/upload_curseforge.py "$TAG"

@@ -75,6 +75,13 @@ local choice = P.Recommend({
     row("c", "Quests", 20, item(12, { AGI = 5 }, 10, "INVTYPE_FEET"), "q2"),
 }, {}, opts)
 assert(#choice == 2 and choice[1].entry.key == "b" and choice[2].entry.key == "c", "one item per choice quest")
+-- Slot filter "chest": the chest reward of q1 counts although the legs reward is the better one.
+local chestOnly = { level = 20, below = 1, above = 2, profile = melee, class = "ROGUE", slotAllowed = function(slot) return slot == 5 end }
+local filtered = P.Recommend({
+    row("a", "Quests", 20, item(10, { AGI = 6 }), "q1"),
+    row("b", "Quests", 20, item(11, { AGI = 9 }, 10, "INVTYPE_LEGS"), "q1"),
+}, {}, chestOnly)
+assert(#filtered == 1 and filtered[1].entry.key == "a", "the slot filter applies before the best reward of a quest")
 
 -- Weapons: casters get wands and staves but not axes; two-hand weapon vs main and off hand.
 local caster = { level = 20, below = 2, above = 2, profile = P.Profile("caster"), class = "MAGE" }
@@ -218,6 +225,13 @@ local clutter = P.Clutter({ { key = "a", item = item(91, { AGI = 3 }) }, { key =
 local reasons = {}
 for _, c in ipairs(clutter) do reasons[c.key] = c.reason end
 assert(reasons.a == "worse" and not reasons.b and reasons.c == "unusable" and not reasons.d, "reserved items stay")
+-- Profession tools and gear never go: skinning knife for a priest, a fishing pole, "Fishing +5" boots.
+local knife = item(7005, { DPS = 2 }, 1, "INVTYPE_WEAPON", 2, 15)
+local pole = item(4000, { DPS = 1 }, 1, "INVTYPE_2HWEAPON", 2, 20)
+assert(St.IsToolText("Mining Pick", {}) and St.IsToolText("Stiefel", { "Anlegen: Angeln um 5 erhöht." })
+    and St.IsToolText("X", { "Requires Engineering (225)" }) and not St.IsToolText("Cape", { "Equip: +5 Agility." }))
+local tools = P.Clutter({ { key = "k", item = knife }, { key = "p", item = pole } }, {}, P.Profile("caster"), "PRIEST", 20)
+assert(#tools == 0, "profession tools are never listed as can go")
 local skills, anySkill = GP.Skills.Parse({ { "Schwerter", 45, 110 }, { "Defense", 100, 110 }, { "Bows", 80, 110 } })
 assert(anySkill and skills[7].rank == 45 and skills[2].rank == 80 and not skills[4])
 
@@ -276,6 +290,16 @@ assert(#onlyQuest == 1 and onlyQuest[1].name == "Razorfen Downs" and onlyQuest[1
 local steps = { { done = true }, {}, { active = true }, {}, {} }
 local doneCount, nextIndex, started = P.ChainStatus(steps)
 assert(steps[2].skipped and doneCount == 2 and nextIndex == 4 and started, "step 2 skipped, step 4 next")
+-- With prerequisites: quest 3 needs 1 and 2 (independent); accepting 2 does not make 1 skipped.
+local graphSteps = { { id = 1, pre = {} }, { id = 2, pre = {}, active = true }, { id = 3, pre = { 1, 2 } } }
+local gDone, gNext = P.ChainStatus(graphSteps)
+assert(not graphSteps[1].skipped and gDone == 0 and gNext == 1, "an independent required quest stays open")
+local crumb = { { id = 4, pre = {} }, { id = 5, pre = { 4 }, done = true }, { id = 6, pre = { 5 } } }
+local cDone, cNext = P.ChainStatus(crumb)
+assert(crumb[1].skipped and cDone == 2 and cNext == 3, "a step a done quest builds on counts as skipped")
+local chainDb = { qx = { [3] = { nil, nil, nil, { 1, 2 } }, [2] = {}, [1] = {} } }
+local chainIds, chainParents = S.Chain(chainDb, 3, "Alliance", 1)
+assert(#chainIds == 3 and chainIds[3] == 3 and #chainParents[3] == 2)
 local fresh = { {}, {} }
 local d0, n0, s0 = P.ChainStatus(fresh)
 assert(d0 == 0 and n0 == 1 and not s0)
@@ -302,6 +326,21 @@ for _, b in ipairs(bis) do bySlot[b.slot] = b.item.id end
 assert(bySlot[5] == 301, "best usable chest within the level limit, no mail for a rogue")
 assert(bySlot[11] == 304 and bySlot[12] == 303, "two best different rings")
 assert(bySlot[16] == 306 and bySlot[17] == 307, "dual wield daggers")
+-- One choice quest leads chest (20 vs 19 elsewhere) and shoulders (20 vs 5 elsewhere): shoulders keep it.
+local choicePool = {
+    { item = item(320, { AGI = 20 }, 30, "INVTYPE_CHEST", 4, 2), key = "qc", entry = { choiceGroup = "q9" } },
+    { item = item(321, { AGI = 20 }, 30, "INVTYPE_SHOULDER", 4, 2), key = "qs", entry = { choiceGroup = "q9" } },
+    { item = item(322, { AGI = 19 }, 30, "INVTYPE_CHEST", 4, 2), key = "c2", entry = {} },
+    { item = item(323, { AGI = 5 }, 30, "INVTYPE_SHOULDER", 4, 2), key = "s2", entry = {} },
+    { item = item(324, { AGI = 9 }, 30, "INVTYPE_FINGER", 4, 0), key = "qr1", entry = { choiceGroup = "q7" } },
+    { item = item(325, { AGI = 8 }, 30, "INVTYPE_FINGER", 4, 0), key = "qr2", entry = { choiceGroup = "q7" } },
+    { item = item(326, { AGI = 2 }, 30, "INVTYPE_FINGER", 4, 0), key = "r", entry = {} },
+}
+local chosen = {}
+for _, b in ipairs(P.BestInSlot(choicePool, melee, "ROGUE", 30, 40)) do chosen[b.slot] = b.item.id end
+assert(chosen[3] == 321 and chosen[5] == 322, "one choice quest, one item: the cheaper slot gives way")
+assert(chosen[11] == 324 and chosen[12] == 326, "two rings of one choice quest are not both picked")
+assert(P.Signature(P.SetCustom({ AGI = 2 })) ~= P.Signature(P.SetCustom({ AGI = 3 })))
 local text = P.ExportWishlist({ [303] = { goal = true }, [12] = {} })
 assert(text == "GP1:12,303!")
 local back = P.ImportWishlist("my list GP1:12, 303! ")
@@ -351,6 +390,11 @@ assert(attSources[1] and attSources[1].kind == "dungeon" and attSources[1].estim
 local attDoor = S.Entrance(attDb, "The Drowned City", att)
 assert(attDoor and attDoor.map == 1434 and math.abs(attDoor.x - 0.215) < 1e-9)
 
+-- Wishlist hints: ATT-only loot (701) reaches the boss and the dungeon (map 2970) too.
+local byNpc, byMap = S.DropIndex(attDb, att, { 700, 701, 500 })
+assert(byNpc[900] and #byNpc[900] == 2 and byMap[2970] and #byMap[2970] == 2, "ATT loot in the drop hints")
+local classicNpc, classicMap = S.DropIndex(srcDb, nil, { 500 })
+assert(classicNpc[639][1].chance == 1500 and classicMap[36][1].boss == "Edwin VanCleef" and not classicMap[0])
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)

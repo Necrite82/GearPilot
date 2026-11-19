@@ -142,27 +142,11 @@ Wish.CheckAuction = checkAuction
 -- Drop hints: the target, or the dungeon you just entered, can drop a wishlist item.
 local hinted = {}
 local function dropIndex()
-    local db = ForeverDB
-    local byNpc, byMap = {}, {}
-    if not db then return byNpc, byMap end
+    local ids = {}
     for id, data in pairs(list()) do
-        if not data.got then
-            local drops = db.drop and db.drop[id] or {}
-            for i = 1, #drops, 2 do
-                local npcID, chance = drops[i], drops[i + 1] or 0
-                byNpc[npcID] = byNpc[npcID] or {}
-                table.insert(byNpc[npcID], { id = id, chance = chance })
-                local spawns = db.spw and db.spw["c" .. npcID]
-                local map = spawns and spawns[1] and spawns[1][1]
-                if map and GP.Sources.instances[map] then
-                    byMap[map] = byMap[map] or {}
-                    local npc = db.npc and db.npc[npcID]
-                    table.insert(byMap[map], { id = id, chance = chance, boss = npc and npc[1] })
-                end
-            end
-        end
+        if not data.got then ids[#ids + 1] = id end
     end
-    return byNpc, byMap
+    return GP.Sources.DropIndex(ForeverDB, GP.DungeonData, ids)
 end
 local function chanceText(chance)
     return chance and chance > 0 and (" (" .. ("%d %%"):format(math.floor(chance / 100 + .5)) .. ")") or ""

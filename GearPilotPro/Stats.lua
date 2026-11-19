@@ -116,6 +116,47 @@ local function tooltipLines(link)
     return lines
 end
 
+-- Profession tools and profession gear: never "can go", even when your class cannot wield them.
+-- Known tools by ID, tool names (EN/DE), and tooltip lines naming a profession ("Requires Engineering",
+-- "Fishing +5", "Angeln um 5 erhöht").
+Stats.toolIDs = {
+    [2901] = true, [7005] = true, [5956] = true, [6219] = true, [10498] = true, [9149] = true, [778] = true,
+    [756] = true, [1959] = true, [20723] = true, [6256] = true, [6365] = true, [6366] = true, [6367] = true,
+    [12225] = true, [19022] = true, [19970] = true, [12709] = true, [19901] = true,
+}
+local toolNames = { "fishing pole", "mining pick", "skinning knife", "blacksmith hammer", "arclight spanner",
+    "angelrute", "spitzhacke", "kürschnermesser", "schmiedehammer", "bogenlicht" }
+Stats.professions = { "fishing", "mining", "herbalism", "skinning", "blacksmithing", "engineering", "enchanting",
+    "leatherworking", "tailoring", "alchemy", "cooking", "first aid", "angeln", "bergbau", "kräuterkunde",
+    "kürschnerei", "schmiedekunst", "ingenieurskunst", "verzauberkunst", "lederverarbeitung", "schneiderei",
+    "alchemie", "kochkunst", "erste hilfe" }
+function Stats.IsToolText(name, lines)
+    local lower = (name or ""):lower()
+    for _, pattern in ipairs(toolNames) do
+        if lower:find(pattern, 1, true) then return true end
+    end
+    for _, line in ipairs(lines or {}) do
+        local text = line:lower()
+        for _, profession in ipairs(Stats.professions) do
+            if text:find(profession, 1, true) and (text:find("requires", 1, true) or text:find("benötigt", 1, true)
+                or text:find("%d") ) then
+                return true
+            end
+        end
+    end
+    return false
+end
+local tools = {}
+function Stats.IsTool(item)
+    if not item then return false end
+    if item.id and Stats.toolIDs[item.id] then return true end
+    if item.classID == 2 and item.subclassID == 20 then return true end -- fishing poles
+    local key = item.link or item.id
+    if key == nil then return false end
+    if tools[key] == nil then tools[key] = Stats.IsToolText(item.name, item.link and tooltipLines(item.link) or {}) end
+    return tools[key]
+end
+
 local cache = {}
 function Stats.Read(link, item)
     if not link then return nil end
