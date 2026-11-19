@@ -40,10 +40,22 @@ function Sources.ClassAllowed(mask, class)
 end
 
 local function npcName(db, ref)
-    if type(ref) ~= "string" or ref:sub(1, 1) ~= "c" then return nil end
-    local npc = db.npc and db.npc[tonumber(ref:sub(2))]
-    return npc and npc[1]
+    if type(ref) ~= "string" then return nil end
+    local kind, id = ref:sub(1, 1), tonumber(ref:sub(2))
+    local entry = kind == "c" and db.npc and db.npc[id] or kind == "o" and db.obj and db.obj[id] or nil
+    return entry and entry[1] or nil
 end
+Sources.GiverName = npcName
+
+-- Forever replaced some Classic quests with new ones of the same name (new IDs from 20000 up). When both turn up
+-- in one place, only the Forever one counts.
+local FOREVER_IDS = 20000
+local function replaced(db, older, newer)
+    if older >= FOREVER_IDS or newer < FOREVER_IDS then return false end
+    local a, b = db.quest and db.quest[older], db.quest and db.quest[newer]
+    return a and b and a[1] == b[1] or false
+end
+Sources.Replaced = replaced
 
 -- Where an NPC lives: a Forever dungeon (ForeverDB "ind") or a Classic instance map (spawn coordinates).
 local function dungeonOf(db, npcID)
@@ -84,7 +96,11 @@ function Sources.Build(db, options)
         local item = db.item and db.item[itemID]
         if equippable(item, class) then
             for _, questID in ipairs(quests) do
-                local quest = db.quest and db.quest[questID]
+                local superseded = false
+                for _, other in ipairs(quests) do
+                    if replaced(db, questID, other) then superseded = true end
+                end
+                local quest = not superseded and db.quest and db.quest[questID]
                 local detail = db.qx and db.qx[questID] or {}
                 local questFaction = Sources.QuestFaction(detail[1])
                 if quest and (not questFaction or not faction or questFaction == faction)
@@ -107,12 +123,15 @@ function Sources.Build(db, options)
                         end
                     end
                     local giver = db.qg and db.qg[questID] and db.qg[questID][1]
-                    local zone = type(detail[11]) == "number" and detail[11] > 0 and db.area and db.area[detail[11]]
+                    local zoneID = type(detail[11]) == "number" and detail[11] > 0 and detail[11] or nil
+                    local zone = zoneID and db.area and db.area[zoneID]
+                    local dungeon = zoneID and db.dng and db.dng[zoneID]
                     rows[#rows + 1] = {
                         itemID = itemID, source = "Quests", sourceID = questID, level = level, name = quest[1],
                         minLevel = quest[3], faction = questFaction, prerequisites = prerequisites,
                         choiceGroup = choice and ("q" .. questID) or nil, giver = npcName(db, giver),
-                        zone = zone and zone[1] or nil,
+                        giverRef = giver, zone = zone and zone[1] or (dungeon and dungeon[1]) or nil,
+                        dungeonQuest = dungeon and dungeon[1] or nil,
                     }
                 end
             end
@@ -144,6 +163,57 @@ function Sources.Build(db, options)
         end
     end
     return rows
+end
+
+-- Quest chain: every prerequisite (recursively), earliest first, ending with the quest itself.
+-- preQuestSingle means "one of these": the first one whose faction fits is taken.
+function Sources.Chain(db, questID, faction)
+    local order, seen = {}, {}
+    local function visit(id, depth)
+        if seen[id] or depth > 20 then return end
+        seen[id] = true
+        local detail = db.qx and db.qx[id] or {}
+        if type(detail[3]) == "table" then
+            for _, pre in ipairs(detail[3]) do
+                local preDetail = db.qx and db.qx[pre] or {}
+                local preFaction = Sources.QuestFaction(preDetail[1])
+                if not preFaction or not faction or preFaction == faction then
+                    visit(pre, depth + 1)
+                    break
+                end
+            end
+        end
+        if type(detail[4]) == "table" then
+            for _, pre in ipairs(detail[4]) do visit(pre, depth + 1) end
+        end
+        order[#order + 1] = id
+    end
+    visit(questID, 0)
+    local kept = {}
+    for _, id in ipairs(order) do
+        local superseded = false
+        for _, other in ipairs(order) do
+            if replaced(db, id, other) then superseded = true end
+        end
+        if not superseded then kept[#kept + 1] = id end
+    end
+    return kept
+end
+
+-- Where a quest giver stands: first spawn in world coordinates (spw) or a map spot (spm, 0-1000).
+function Sources.Spot(db, ref)
+    if type(ref) ~= "string" then return nil end
+    local spawns = db.spw and db.spw[ref]
+    if spawns and spawns[1] and spawns[1][2] then
+        return { world = true, map = spawns[1][1], x = spawns[1][2], y = spawns[1][3] }
+    end
+    local spots = db.spm and db.spm[ref]
+    if spots then
+        for uiMap, xy in pairs(spots) do
+            if xy[1] then return { world = false, map = uiMap, x = xy[1] / 1000, y = xy[2] / 1000 } end
+        end
+    end
+    return nil
 end
 
 -- In game -----------------------------------------------------------------------------------------------------
@@ -193,6 +263,37 @@ function Sources.DungeonName(row)
     end
     return row.name
 end
+-- Map position (uiMap, x, y in 0..1) and world position of a spot. World and map conversion need the game.
+function Sources.MapPoint(spot)
+    if not spot then return nil end
+    if not spot.world then return spot.map, spot.x, spot.y end
+    if not (C_Map and C_Map.GetMapPosFromWorldPos and CreateVector2D) then return nil end
+    local ok, uiMap, pos = pcall(C_Map.GetMapPosFromWorldPos, spot.map, CreateVector2D(spot.x, spot.y))
+    if ok and uiMap and pos then return uiMap, pos.x, pos.y end
+    return nil
+end
+function Sources.WorldPoint(spot)
+    if not spot then return nil end
+    if spot.world then return spot.map, spot.x, spot.y end
+    if not (C_Map and C_Map.GetWorldPosFromMapPos and CreateVector2D) then return nil end
+    local ok, continent, pos = pcall(C_Map.GetWorldPosFromMapPos, spot.map, CreateVector2D(spot.x, spot.y))
+    if ok and continent and pos then return continent, pos.x, pos.y end
+    return nil
+end
+-- Distance in yards from the player, nil when unknown or on another continent.
+function Sources.Distance(spot)
+    if not (spot and UnitPosition) then return nil end
+    local py, px, _, instance = UnitPosition("player")
+    if not py then return nil end
+    local map, x, y = Sources.WorldPoint(spot)
+    if not map or map ~= instance then return nil end
+    return math.sqrt((x - py) ^ 2 + (y - px) ^ 2)
+end
+function Sources.MapName(uiMap)
+    local info = uiMap and C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(uiMap)
+    return info and info.name or nil
+end
+
 function Sources.QuestDone(questID)
     return C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
 end

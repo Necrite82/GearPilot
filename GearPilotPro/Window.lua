@@ -13,13 +13,13 @@ local function number(v)
 end
 local function signed(v) return (v >= 0 and "+" or "−") .. number(math.abs(v)) end
 local function tooltip(owner, title, lines)
-    owner:SetScript("OnEnter", function()
+    owner:HookScript("OnEnter", function()
         GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
         GameTooltip:SetText(type(title) == "function" and title() or title)
         for _, line in ipairs(type(lines) == "function" and lines() or lines or {}) do GameTooltip:AddLine(line, 1, 1, 1, true) end
         GameTooltip:Show()
     end)
-    owner:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    owner:HookScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
 -- Window -----------------------------------------------------------------------------------------------------
@@ -62,6 +62,9 @@ line:SetColorTexture(C.border[1], C.border[2], C.border[3], 1)
 local function chip(width)
     local b = CreateFrame("Button", nil, header, "BackdropTemplate")
     S.Round(b, true)
+    b:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1)
+    b:SetFrameLevel(header:GetFrameLevel() + 5)
+    b:RegisterForClicks("LeftButtonUp")
     b:SetSize(width, 22)
     b.dot = b:CreateTexture(nil, "OVERLAY")
     b.dot:SetSize(7, 7)
@@ -72,9 +75,9 @@ local function chip(width)
     b:SetScript("OnClick", function() GP.Open("settings") end)
     return b
 end
-U.dataChip = chip(124)
+U.dataChip = chip(130)
 U.dataChip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, -30)
-U.rangeChip = chip(150)
+U.rangeChip = chip(184)
 U.rangeChip:SetPoint("RIGHT", U.dataChip, "LEFT", -8, 0)
 tooltip(U.rangeChip, function() return L("Level range") end, function()
     return { L("Quests and dungeons in this range are compared. Bag items are always compared."), L("Click: settings") }
@@ -164,12 +167,14 @@ local function navButton(key, caption)
     b.icon:SetPoint("CENTER", b.iconBox, "CENTER", 0, 0)
     b.icon:SetTexture(navIcons[key])
     b.icon:SetTexCoord(.08, .92, .08, .92)
-    b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    b.label = b:CreateFontString(nil, "OVERLAY")
+    b.label:SetFontObject(S.Font("GameFontNormal"))
     b.label:SetPoint("LEFT", b, "LEFT", 40, 0)
     b.label:SetPoint("RIGHT", b, "RIGHT", -30, 0)
     b.label:SetJustifyH("LEFT")
     b.label:SetText(caption)
-    b.badge = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    b.badge = b:CreateFontString(nil, "OVERLAY")
+    b.badge:SetFontObject(S.Font("GameFontHighlightSmall"))
     b.badge:SetPoint("RIGHT", b, "RIGHT", -8, 0)
     b.badge:SetTextColor(.94, .82, .54)
     b:SetScript("OnClick", function() GP.Open(key) end)
@@ -239,6 +244,35 @@ U.detailName = S.Text(U.detail, "GameFontNormalLarge", 60, 11, 300)
 U.detailSub = S.Text(U.detail, "GameFontDisableSmall", 60, 33, 300)
 U.action = S.Button(U.detail, 120, 26, "", nil)
 U.action:Hide()
+U.action2 = S.Button(U.detail, 120, 26, "", nil)
+U.action2:Hide()
+
+-- Filter bar above the quest list: sort order and dungeon quests.
+U.bar = CreateFrame("Frame", nil, frame)
+U.bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -TOP)
+U.bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -TOP)
+U.bar:SetHeight(28)
+U.bar.segments = {}
+local function segmentGroup(x, label, width, options, field)
+    local caption = S.Text(U.bar, "GameFontDisableSmall", x, 8, 0, L(label))
+    caption:SetWidth(0)
+    local group = S.Surface(U.bar, "raised")
+    local captionWidth = math.max(60, math.floor((caption:GetStringWidth() or 60) + 10))
+    group:SetPoint("TOPLEFT", U.bar, "TOPLEFT", x + captionWidth, 0)
+    group:SetSize(#options * width + 6, 28)
+    for i, option in ipairs(options) do
+        local b = S.Button(group, width - 2, 22, L(option[2]), function()
+            GP.settings[field] = option[1]
+            GP.Render()
+        end)
+        b:SetPoint("TOPLEFT", group, "TOPLEFT", 4 + (i - 1) * width, -3)
+        b.field, b.value = field, option[1]
+        U.bar.segments[#U.bar.segments + 1] = b
+    end
+    return x + captionWidth + #options * width + 24
+end
+local barX = segmentGroup(0, "Sort", 82, { { "gain", "Score" }, { "distance", "Distance" }, { "zone", "Zone" } }, "questSort")
+segmentGroup(barX, "Dungeon quests", 82, { { "show", "Show" }, { "hide", "Hide" }, { "only", "Only" } }, "dungeonQuests")
 
 -- Full-width surface for settings and help.
 U.page = S.Surface(frame, "panel")
@@ -289,13 +323,13 @@ local function detailLine(font, value, c, indent)
     local index = #U.lines.used + 1
     local t = U.lines[index]
     if not t then
-        t = U.detail:CreateFontString(nil, "OVERLAY", font)
+        t = U.detail:CreateFontString(nil, "OVERLAY")
         t:SetJustifyH("LEFT")
         U.lines[index] = t
     end
     U.lines.used[index] = t
     local width = (U.detail:GetWidth() or 300) - 24 - (indent or 0)
-    t:SetFontObject(font)
+    t:SetFontObject(S.Font(font))
     t:ClearAllPoints()
     t:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12 + (indent or 0), -detailY)
     t:SetWidth(width)
@@ -316,6 +350,8 @@ local function resetDetail()
     U.lines.used = {}
     S.HideMetrics(U.detail)
     U.action:Hide()
+    U.action2:Hide()
+    if U.hideBars then U.hideBars() end
     U.detailLink = nil
     detailY = 0
 end
@@ -327,7 +363,10 @@ local function sourceLine(entry)
     local row = entry.row
     if entry.source == "Bags" then return L("In your bags") end
     if entry.source == "Quests" then
-        return ("%s · %s"):format(L("Quest"), (L("Level %d")):format(entry.level))
+        local kind = row.dungeonQuest and ("|cffd9a35a" .. L("Dungeon quest") .. "|r") or L("Quest")
+        local distance = entry.distance and (" · " .. (L("%d yd")):format(entry.distance)) or ""
+        if GP.settings.questSort == "zone" and row.zone then distance = " · " .. row.zone end
+        return ("%s · %s%s"):format(kind, (L("Level %d")):format(entry.level), distance)
     end
     local chance = row and row.chance and (" · %d %%"):format(math.floor(row.chance * 100 + .5)) or ""
     return ("%s%s"):format(GP.Sources.DungeonName(row), chance)
@@ -367,14 +406,63 @@ local function showItemHead(item, sub)
     detailY = math.max(58, 40 + (U.detailName:GetStringHeight() or 16))
 end
 
-local function statLines(diff)
+-- Value bars like CraftPilot: each bar grows from the middle, right for a gain and left for a loss; its length
+-- is the weighted effect on the score, so the bars show what makes an item better.
+U.bars = {}
+local function bar(i)
+    local b = U.bars[i]
+    if b then return b end
+    b = {
+        label = S.Text(U.detail, "GameFontHighlightSmall", 0, 0, 100),
+        value = S.Text(U.detail, "GameFontHighlightSmall", 0, 0, 100, "", "RIGHT"),
+        track = U.detail:CreateTexture(nil, "ARTWORK"), fill = U.detail:CreateTexture(nil, "OVERLAY"),
+        zero = U.detail:CreateTexture(nil, "OVERLAY"),
+    }
+    b.track:SetHeight(4)
+    b.track:SetColorTexture(.15, .17, .2, 1)
+    b.fill:SetHeight(4)
+    b.zero:SetSize(1, 8)
+    b.zero:SetColorTexture(.30, .34, .40, 1)
+    U.bars[i] = b
+    return b
+end
+local function hideBars()
+    for _, b in ipairs(U.bars) do
+        b.label:Hide(); b.value:Hide(); b.track:Hide(); b.fill:Hide(); b.zero:Hide()
+    end
+end
+U.hideBars = hideBars
+local function statLines(diff, profile)
     if #diff == 0 then
         detailLine("GameFontDisableSmall", L("No value differences."), C.muted)
         return
     end
+    local most = 0
     for _, d in ipairs(diff) do
-        local c = d.delta > 0 and C.green or C.red
-        detailLine("GameFontHighlightSmall", ("%s  %s"):format(signed(d.delta), L(St.names[d.key] or d.key)), c, 4)
+        d.points = d.delta * (profile and profile[d.key] or 0)
+        most = math.max(most, math.abs(d.points))
+    end
+    local width = (U.detail:GetWidth() or 300) - 24
+    for i, d in ipairs(diff) do
+        local b = bar(i)
+        local c = d.points > 0 and C.green or d.points < 0 and C.red or C.muted
+        b.label:ClearAllPoints(); b.label:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY); b.label:SetWidth(width)
+        b.label:SetText(L(St.names[d.key] or d.key))
+        b.value:ClearAllPoints(); b.value:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY); b.value:SetWidth(width)
+        local points = d.points ~= 0 and ("  |cff9dabb8(" .. signed(d.points) .. ")|r") or ("  |cff9dabb8" .. L("(not weighted)") .. "|r")
+        b.value:SetText(signed(d.delta) .. points)
+        b.value:SetTextColor(c[1], c[2], c[3])
+        b.track:ClearAllPoints(); b.track:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -(detailY + 16)); b.track:SetWidth(width)
+        local half = width / 2
+        local frac = most > 0 and math.abs(d.points) / most or 0
+        b.fill:ClearAllPoints()
+        if d.points >= 0 then b.fill:SetPoint("TOPLEFT", b.track, "TOPLEFT", half, 0)
+        else b.fill:SetPoint("TOPRIGHT", b.track, "TOPLEFT", half, 0) end
+        b.fill:SetWidth(math.max(1, half * frac))
+        b.fill:SetColorTexture(c[1], c[2], c[3], 1)
+        b.zero:ClearAllPoints(); b.zero:SetPoint("CENTER", b.track, "LEFT", half, 0)
+        b.label:Show(); b.value:Show(); b.track:Show(); b.zero:Show(); b.fill:SetShown(frac > 0)
+        detailY = detailY + 28
     end
 end
 
@@ -391,7 +479,8 @@ local function showUpgrade(result)
         third = { label = L("Required level"), value = tostring(item.minLevel or "?") }
     end
     S.Metrics(U.detail, {
-        { label = L("Score gain"), value = signed(result.gain), color = C.green, emphasis = true },
+        { label = L("Score gain"), value = signed(result.gain) .. (result.score - result.gain > 0
+            and ("  |cff9dabb8" .. signed(result.gain / (result.score - result.gain) * 100) .. " %|r") or ""), color = C.green, emphasis = true },
         { label = L("Replaces"), value = replaced, color = C.text },
         third,
     }, 12, detailY, width)
@@ -423,8 +512,38 @@ local function showUpgrade(result)
             end
             detailLine("GameFontHighlightSmall", L("Prerequisites: ") .. table.concat(parts, ", "))
         end
+        if row.dungeonQuest then
+            detailLine("GameFontHighlightSmall", "|cffd9a35a" .. L("Dungeon quest: ") .. row.dungeonQuest .. "|r")
+        end
         if row.choiceGroup then
             detailLine("GameFontDisableSmall", L("Choice reward: you get one item of this quest. GearPilot shows the best one for you."), C.muted)
+        end
+        local chain = GP.Route.Chain(row.sourceID)
+        detailY = detailY + 4
+        U.action:SetText(L("Waypoint to quest giver"))
+        S.Primary(U.action)
+        U.action:SetWidth(170)
+        U.action:SetScript("OnClick", function() GP.Route.ToGiver(row.sourceID) end)
+        U.action:ClearAllPoints()
+        U.action:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+        U.action:Show()
+        if #chain > 1 then
+            U.action2:SetText((L("Whole chain (%d)")):format(#chain))
+            U.action2:SetWidth(150)
+            U.action2:SetScript("OnClick", function() GP.Route.ToChain(row.sourceID) end)
+            U.action2:ClearAllPoints()
+            U.action2:SetPoint("LEFT", U.action, "RIGHT", 8, 0)
+            U.action2:Show()
+        end
+        detailY = detailY + 34
+        if #chain > 1 then
+            section(L("Quest chain"))
+            for i, step in ipairs(chain) do
+                local mark = step.done and "|cff85d6a0✓|r" or step.active and "|cffe0b050▶|r" or "|cff9dabb8•|r"
+                local where = (step.giver or "?") .. (step.zone and (", " .. step.zone) or "")
+                detailLine("GameFontHighlightSmall", ("%s %d. %s"):format(mark, i, step.title), step.id == row.sourceID and C.gold or C.text, 4)
+                detailLine("GameFontDisableSmall", where, C.muted, 22)
+            end
         end
     else
         detailLine("GameFontHighlight", GP.Sources.DungeonName(row) .. (row.raid and (" (" .. L("raid") .. ")") or ""))
@@ -433,7 +552,7 @@ local function showUpgrade(result)
             or L("Drop chance not known yet (new in Forever or too few kills recorded)."))
     end
     section(L("Values compared"))
-    statLines(P.Diff(item, result.current))
+    statLines(P.Diff(item, result.current), P.Profile(GP.settings.profile))
 end
 
 local function showGear(data, profile)
@@ -466,7 +585,7 @@ local pageLines = {}
 local function pageText(i, font, x, y, width, value, c, align)
     local t = pageLines[i] or S.Text(U.page, font, 0, 0, 10)
     pageLines[i] = t
-    t:SetFontObject(font)
+    t:SetFontObject(S.Font(font))
     t:SetJustifyH(align or "LEFT")
     t:ClearAllPoints()
     t:SetPoint("TOPLEFT", U.page, "TOPLEFT", x, -y)
@@ -530,7 +649,15 @@ local function renderSettings()
         b:SetPoint("TOPLEFT", U.page, "TOPLEFT", 16 + (i - 1) * 88, -y)
         S.Segment(b, s.minChance == value)
     end
-    y = y + 44
+    y = y + 40
+    text("GameFontNormal", L("Item tooltip"), C.gold)
+    text("GameFontHighlightSmall", L("Shows in every item tooltip how much better or worse the item is than what you wear."))
+    for i, option in ipairs({ { true, "On" }, { false, "Off" } }) do
+        local b = control("tooltip" .. i, 80, L(option[2]), function() s.tooltip = option[1]; GP.Render() end)
+        b:SetPoint("TOPLEFT", U.page, "TOPLEFT", 16 + (i - 1) * 88, -y)
+        S.Segment(b, s.tooltip == option[1])
+    end
+    y = y + 40
     text("GameFontNormal", "ForeverDB", C.gold)
     local build = GP.Sources.BuildDate()
     text("GameFontHighlightSmall", build and (L("Installed, data from ") .. build .. ". " .. L("Quest rewards and dungeon drops come from ForeverDB (GPL-3.0, github.com/foreverfraddons/forever-db)."))
@@ -599,6 +726,10 @@ function GP.Render()
 
     for _, c in pairs(U.controls) do c:Hide() end
     for _, t in ipairs(pageLines) do t:Hide() end
+    U.bar:SetShown(page == "quests")
+    for _, b in ipairs(U.bar.segments) do S.Segment(b, s[b.field] == b.value) end
+    local top = page == "quests" and TOP + 38 or TOP
+    U.listPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -top)
     if page == "settings" or page == "help" then
         U.listPanel:Hide()
         U.detailPanel:Hide()
@@ -620,6 +751,27 @@ function GP.Render()
         list = P.Recommend(candidates, equipped, {
             level = player.level, below = s.below, above = s.above, profile = profile, class = player.class,
         })
+        if page == "quests" then
+            for _, result in ipairs(list) do
+                local row = result.entry.row
+                local spot = ForeverDB and GP.Sources.Spot(ForeverDB, row.giverRef)
+                local distance = GP.Sources.Distance(spot)
+                result.entry.distance = distance and math.floor(distance + .5) or nil
+            end
+            if s.questSort == "distance" then
+                table.sort(list, function(a, b)
+                    local da, db = a.entry.distance or math.huge, b.entry.distance or math.huge
+                    if da ~= db then return da < db end
+                    return a.gain > b.gain
+                end)
+            elseif s.questSort == "zone" then
+                table.sort(list, function(a, b)
+                    local za, zb = a.entry.row.zone or "~", b.entry.row.zone or "~"
+                    if za ~= zb then return za < zb end
+                    return a.gain > b.gain
+                end)
+            end
+        end
     end
 
     -- List

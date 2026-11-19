@@ -189,6 +189,28 @@ function Planner.Recommend(candidates, equipped, options)
     return kept
 end
 
+-- One item against what is worn, for the item tooltip. Returns nil for items GearPilot does not score,
+-- { usable = false } for items the class cannot use, otherwise the best slot with gain and percent.
+function Planner.Compare(item, equipped, profile, class, level)
+    local slots = item and targetSlots[item.equip]
+    if not slots or not item.stats then return nil end
+    if not Planner.CanUse(item, class, math.max(level, item.minLevel or 0)) then return { usable = false } end
+    if item.equip == "INVTYPE_WEAPON" and dualWield(class, level) then slots = {16, 17} end
+    local score = Planner.Score(item, profile)
+    local best
+    for _, slot in ipairs(slots) do
+        local base, current = baseline(slot, item, equipped, profile)
+        if current and current.link and current.link == item.link then
+            return { usable = true, worn = true, slot = slot, score = score }
+        end
+        if base and (not best or score - base > best.gain) then
+            best = { usable = true, slot = slot, gain = score - base, base = base, score = score, current = current }
+        end
+    end
+    if best and best.base > 0 then best.percent = best.gain / best.base * 100 end
+    return best
+end
+
 -- Differences between two value tables, for the detail panel.
 function Planner.Diff(new, old)
     local out = {}
