@@ -55,7 +55,17 @@ Planner.specProfiles = {
     MAGE = { "caster", "caster", "caster" }, WARLOCK = { "caster", "caster", "caster" },
     DRUID = { "caster", "melee-agi", "healer", "healer" },
 }
-function Planner.SpecProfile(class, spec)
+-- Role and primary stat decide when the game gives them; the spec order table is the fallback. Hunters:
+-- Survival (third specialization) fights in melee.
+function Planner.SpecProfile(class, spec, role, primaryStat)
+    if role == "TANK" then return "tank" end
+    if role == "HEALER" then return "healer" end
+    if role == "DAMAGER" then
+        if class == "HUNTER" then return spec == 3 and "melee-agi" or "ranged" end
+        if primaryStat == 1 then return "melee-str" end
+        if primaryStat == 2 then return "melee-agi" end
+        if primaryStat == 4 then return "caster" end
+    end
     local list = Planner.specProfiles[class]
     return list and spec and list[spec] or Planner.defaultProfile[class]
 end
@@ -69,8 +79,8 @@ Planner.pawnKeys = {
     spellhitrating = "SHIT", spellhit = "SHIT", defenserating = "DEF", defense = "DEF", dodgerating = "DODGE",
     dodge = "DODGE", parryrating = "PARRY", parry = "PARRY", blockrating = "BLOCK", block = "BLOCK",
     blockvalue = "BLOCKVAL", hasterating = "HASTE", haste = "HASTE",
-    firespelldamage = "SCHOOL", frostspelldamage = "SCHOOL", shadowspelldamage = "SCHOOL",
-    arcanespelldamage = "SCHOOL", naturespelldamage = "SCHOOL", holyspelldamage = "SCHOOL",
+    firespelldamage = "SCHOOL_FIRE", frostspelldamage = "SCHOOL_FROST", shadowspelldamage = "SCHOOL_SHADOW",
+    arcanespelldamage = "SCHOOL_ARCANE", naturespelldamage = "SCHOOL_NATURE", holyspelldamage = "SCHOOL_HOLY",
 }
 function Planner.ParsePawn(text)
     if type(text) ~= "string" then return nil end
@@ -79,7 +89,7 @@ function Planner.ParsePawn(text)
         local key = Planner.pawnKeys[name:lower()]
         local number = tonumber(value)
         if key and number then
-            weights[key] = key == "SCHOOL" and math.max(weights[key] or 0, number) or number
+            weights[key] = number
             found = found + 1
         end
     end
@@ -175,13 +185,20 @@ function Planner.CanUse(item, class, level)
     return false
 end
 
+-- Weight of a value: school damage (SCHOOL_FIRE, ...) uses its own weight, otherwise the general SCHOOL weight.
+function Planner.Weight(profile, key)
+    local weight = profile and profile[key]
+    if weight == nil and profile and key:sub(1, 7) == "SCHOOL_" then weight = profile.SCHOOL end
+    return type(weight) == "number" and weight or nil
+end
+
 function Planner.Score(item, profile)
     if not item then return 0 end
     if not item.stats then return nil end
     local score = 0
     for key, value in pairs(item.stats) do
-        local weight = profile[key]
-        if type(weight) == "number" then score = score + weight * value end
+        local weight = Planner.Weight(profile, key)
+        if weight then score = score + weight * value end
     end
     return score
 end
@@ -332,7 +349,9 @@ function Planner.WeaponSets(pool, equipped, profile, class, level, maxLevel)
             result.pair = { main = m.item, mainEntry = m.entry, score = mainScore }
         end
         for _, o in ipairs(offs) do
-            local same = o.item == m.item or (o.key and o.key == m.key)
+            -- Two choice rewards of one quest cannot both be taken.
+            local mg, og = m.entry and m.entry.choiceGroup, o.entry and o.entry.choiceGroup
+            local same = o.item == m.item or (o.key and o.key == m.key) or (mg and mg == og)
             if not same then
                 local score = mainScore + Planner.SlotScore(o.item, profile, 17)
                 if score > result.pair.score then
@@ -387,8 +406,17 @@ function Planner.ByDungeon(dropResults, questResults)
         entry.high = math.max(entry.high, row.level)
     end
     for _, result in ipairs(questResults or {}) do
-        local entry = dungeons[result.entry.row.dungeonQuest or ""]
-        if entry then
+        local row = result.entry.row
+        local name = row.dungeonQuest
+        if name then
+            local entry = dungeons[name]
+            if not entry then
+                -- A dungeon with only a quest upgrade is still worth the trip.
+                entry = { key = "dungeon:" .. name, name = name, row = { name = name, level = row.level }, results = {},
+                    quests = {}, expected = 0, unknown = 0, low = row.level, high = row.level }
+                dungeons[name] = entry
+                list[#list + 1] = entry
+            end
             entry.quests[#entry.quests + 1] = result
             entry.expected = entry.expected + result.gain
         end

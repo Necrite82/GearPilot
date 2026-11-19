@@ -5,6 +5,7 @@ GP.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetada
     or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) or ""
 
 local function itemData(ref)
+    if ref == nil or ref == "" then return { loading = true } end
     local name, link, quality, _, minLevel, _, _, _, equip, icon, sellPrice, classID, subclassID = C_Item.GetItemInfo(ref)
     if not name or not link then
         local id = type(ref) == "number" and ref or tonumber(tostring(ref):match("item:(%d+)"))
@@ -34,7 +35,9 @@ end
 
 function GP.Player()
     local _, class = UnitClass("player")
-    return { class = class, level = UnitLevel("player") or 1, faction = UnitFactionGroup("player") }
+    local _, _, raceID = UnitRace("player")
+    return { class = class, level = UnitLevel("player") or 1, faction = UnitFactionGroup("player"),
+        raceBit = GP.Sources.RaceBit(raceID) }
 end
 
 -- Candidates of one source ("Bags", "Quests", "Dungeons") inside the level window.
@@ -63,7 +66,7 @@ function GP.ReadCandidates(source, low, high)
         end
         return entries, loading, "ready"
     end
-    local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance)
+    local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance, player.raceBit)
     if not rows then return entries, false, "missing" end
     local db = ForeverDB
     if source == "Crafted" then
@@ -134,6 +137,7 @@ local function initialize()
     saved.weaponPool = saved.weaponPool == "all" and "all" or "own"
     saved.shopSort = (saved.shopSort == "price" or saved.shopSort == "value") and saved.shopSort or "gain"
     saved.shopMax = tonumber(saved.shopMax) or 0
+    saved.slotFilter = type(saved.slotFilter) == "string" and saved.slotFilter or "all"
     if saved.minimap == nil then saved.minimap = true end
     if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"
@@ -182,10 +186,21 @@ function GP.Professions()
 end
 
 -- Specialization from the game: retail-style specializations, otherwise the talent tree with most points.
+-- Specialization index, role ("TANK", "HEALER", "DAMAGER") and primary stat (1 strength, 2 agility, 4 intellect).
+-- Forever has these in C_SpecializationInfo; the old globals are only a fallback.
 function GP.Specialization()
-    if GetSpecialization then
-        local ok, spec = pcall(GetSpecialization)
-        if ok and type(spec) == "number" and spec > 0 then return spec end
+    local info = C_SpecializationInfo
+    local get = info and info.GetSpecialization or GetSpecialization
+    if get then
+        local ok, spec = pcall(get)
+        if ok and type(spec) == "number" and spec > 0 then
+            local details = info and info.GetSpecializationInfo or GetSpecializationInfo
+            if details then
+                local found, _, _, _, _, role, primaryStat = pcall(details, spec)
+                if found then return spec, role, primaryStat end
+            end
+            return spec
+        end
     end
     if GetNumTalentTabs and GetTalentTabInfo then
         local best, most = nil, 0

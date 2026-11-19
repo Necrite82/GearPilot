@@ -2,15 +2,16 @@
 local _, GP = ...
 local P, L, S, St = GP.Planner, GP.L, GP.Style, GP.Stats
 local C = S.palette
-local KEYS = { "STR", "AGI", "STA", "INT", "SPI", "AP", "RAP", "SP", "HEAL", "SCHOOL", "MP5", "CRIT", "SCRIT", "HIT",
-    "SHIT", "DEF", "DODGE", "PARRY", "BLOCK", "BLOCKVAL", "ARMOR", "DPS", "RDPS", "WAND" }
+local KEYS = { "STR", "AGI", "STA", "INT", "SPI", "AP", "RAP", "SP", "HEAL", "MP5", "CRIT", "SCRIT", "HIT",
+    "SHIT", "DEF", "DODGE", "PARRY", "BLOCK", "BLOCKVAL", "ARMOR", "DPS", "RDPS", "WAND", "SCHOOL",
+    "SCHOOL_FIRE", "SCHOOL_FROST", "SCHOOL_SHADOW", "SCHOOL_ARCANE", "SCHOOL_NATURE", "SCHOOL_HOLY" }
 
 local dialog
 local function build()
     local f = CreateFrame("Frame", "GearPilotProWeights", UIParent, "BackdropTemplate")
     S.Round(f)
     f:SetBackdropColor(C.window[1], C.window[2], C.window[3], 1)
-    f:SetSize(560, 560)
+    f:SetSize(560, 660)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
     f:SetClampedToScreen(true)

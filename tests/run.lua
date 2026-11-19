@@ -23,7 +23,8 @@ local cases = {
     { "Equip: +24 ranged Attack Power.", "RAP", 24 },
     { "Anlegen: +24 Distanzangriffskraft.", "RAP", 24 },
     { "Equip: +20 Attack Power.", "AP", 20 },
-    { "Equip: Increases damage done by Fire spells and effects by up to 9.", "SCHOOL", 9 },
+    { "Equip: Increases damage done by Fire spells and effects by up to 9.", "SCHOOL_FIRE", 9 },
+    { "Anlegen: Erhöht durch Frostzauber und Frosteffekte zugefügten Schaden um bis zu 7.", "SCHOOL_FROST", 7 },
     { "Use: Restores 375 to 625 mana.", nil },
     { "Chance on hit: Blasts your enemy for 30 Fire damage.", nil },
     { "11 - 21 Damage", nil },
@@ -235,5 +236,40 @@ local palaSets = P.WeaponSets({ { item = w1a, key = "b" }, { item = w1b, key = "
     { item = item(103, { STA = 10 }, 30, "INVTYPE_SHIELD", 4, 6), key = "d" } }, {}, fury, "PALADIN", 30)
 assert(palaSets.pair.off and palaSets.pair.off.equip == "INVTYPE_SHIELD", "paladin: shield, no second weapon")
 assert(P.SpecProfile("HUNTER", 3) == "melee-agi", "survival hunters fight in melee")
+
+-- Code review 0.5.0 -------------------------------------------------------------------------------------------
+-- (2) role and primary stat from C_SpecializationInfo decide
+assert(P.SpecProfile("WARRIOR", 3, "TANK") == "tank" and P.SpecProfile("DRUID", 4, "HEALER") == "healer")
+assert(P.SpecProfile("SHAMAN", 2, "DAMAGER", 2) == "melee-agi" and P.SpecProfile("PALADIN", 3, "DAMAGER", 1) == "melee-str")
+assert(P.SpecProfile("HUNTER", 3, "DAMAGER", 2) == "melee-agi" and P.SpecProfile("HUNTER", 2, "DAMAGER", 2) == "ranged")
+-- (3) two choice rewards of one quest are never main + off hand
+local qa = item(110, { DPS = 20 }, 30, "INVTYPE_WEAPON", 2, 7)
+local qb = item(111, { DPS = 19 }, 30, "INVTYPE_WEAPON", 2, 7)
+local qc = item(112, { DPS = 5 }, 30, "INVTYPE_WEAPON", 2, 15)
+local choiceSets = P.WeaponSets({ { item = qa, key = "qa", entry = { choiceGroup = "q9" } }, { item = qb, key = "qb", entry = { choiceGroup = "q9" } },
+    { item = qc, key = "qc", entry = {} } }, {}, fury, "WARRIOR", 30)
+assert(choiceSets.pair.main == qa and choiceSets.pair.off == qc, "same quest choice cannot fill both hands")
+-- (4) race masks: human-only quest not for a dwarf; full faction masks also for the Skyborne
+assert(S.RaceAllowed(1, S.RaceBit(1), "Alliance") and not S.RaceAllowed(1, S.RaceBit(3), "Alliance"))
+assert(S.RaceAllowed(77, 2 ^ 32, "Alliance") and not S.RaceAllowed(178, 2 ^ 32, "Alliance"))
+assert(S.RaceAllowed(4294967373, 2 ^ 32, "Alliance"))
+local raceDb = {
+    item = { [200] = { "Human Helm", 2, 10, 12, 4, 1, 1 } }, quest = { [20] = { "Human only", 12, 10 } },
+    qx = { [20] = { 1 }, [30] = { nil, nil, { 21, 22 } }, [21] = { 77 }, [22] = { 77 } }, rew = { [200] = { 20 } },
+}
+local function build(raceID) return S.Build(raceDb, { class = "MAGE", faction = "Alliance", raceBit = S.RaceBit(raceID) }) end
+assert(#build(1) == 1 and #build(3) == 0, "human-only reward hidden for a dwarf")
+assert(table.concat(S.Chain(raceDb, 30, "Alliance", 1, function(id) return id == 22 end), ",") == "22,30",
+    "the branch already done is the chain step")
+assert(table.concat(S.Chain(raceDb, 30, "Alliance", 1), ",") == "21,30")
+-- (5) schools stay apart; the general SCHOOL weight still covers every school
+local fireScale = P.ParsePawn('( Pawn: v1: "Fire": SpellDamage=1, FireSpellDamage=0.9 )')
+assert(fireScale.SCHOOL_FIRE == 0.9 and not fireScale.SCHOOL_FROST and not fireScale.SCHOOL)
+assert(P.Score({ stats = { SCHOOL_FROST = 10 } }, fireScale) == 0, "a fire scale does not count frost")
+assert(P.Score({ stats = { SCHOOL_FIRE = 10 } }, fireScale) == 9)
+assert(P.Score({ stats = { SCHOOL_FROST = 10 } }, P.Profile("caster")) == 6, "built-in caster weights every school")
+-- (6) a dungeon with only a quest upgrade is in the overview
+local onlyQuest = P.ByDungeon({}, { res(nil, 7, "Razorfen Downs") })
+assert(#onlyQuest == 1 and onlyQuest[1].name == "Razorfen Downs" and onlyQuest[1].expected == 7 and #onlyQuest[1].results == 0)
 
 print("GearPilot checks passed")

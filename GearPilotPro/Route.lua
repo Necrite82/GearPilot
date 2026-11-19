@@ -32,7 +32,8 @@ end
 function Route.Chain(questID)
     local steps = {}
     if not ForeverDB then return steps end
-    for _, id in ipairs(S.Chain(ForeverDB, questID, UnitFactionGroup("player"))) do
+    local player = GP.Player()
+    for _, id in ipairs(S.Chain(ForeverDB, questID, player.faction, player.raceBit, S.QuestDone)) do
         steps[#steps + 1] = Route.Step(id)
     end
     return steps
