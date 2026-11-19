@@ -290,6 +290,8 @@ U.action = S.Button(U.detail, 120, 26, "", nil)
 U.action:Hide()
 U.action2 = S.Button(U.detail, 120, 26, "", nil)
 U.action2:Hide()
+U.action3 = S.Button(U.detail, 90, 26, "", nil)
+U.action3:Hide()
 
 -- Filter bar above the list: every setting is one block (caption and options in one rounded box); the blocks
 -- flow from left to right and wrap when the window is narrow.
@@ -362,14 +364,26 @@ segmentPill({ "quests" }, "Dungeon quests", 90, { { "show", "Show" }, { "hide", 
 segmentPill({ "dungeons" }, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" }, { "togo", "To go" } }, "views.dungeons", "items")
 local dungeonShow = segmentPill({ "dungeons" }, "Show", 120, { { "all", "All dungeons" }, { "range", "Only in range" } }, "dungeonShow", "all")
 dungeonShow.when = function() return (GP.settings.views.dungeons or "items") == "overview" end
-local prepare = actionPill({ "dungeons" }, "To go", 170, { { "Prepare all", function()
+local function togoDungeons()
     local _, byName = GP.Catalog()
     local list = {}
     for _, entry in ipairs(GP.Togo.List()) do
         if byName[entry.name] then list[#list + 1] = byName[entry.name] end
     end
-    GP.Togo.Prepare(list)
-end } })
+    return list
+end
+local prepare = actionPill({ "dungeons" }, "To go", 150, { { "Prepare all", function() GP.Togo.Prepare(togoDungeons()) end },
+    { "Map", function()
+        local ids, seen, entrances = {}, {}, {}
+        for _, d in ipairs(togoDungeons()) do
+            for _, id in ipairs(GP.Togo.NextSteps((GP.Togo.Quests(d)))) do
+                if not seen[id] then seen[id] = true; ids[#ids + 1] = id end
+            end
+            local spot = ForeverDB and GP.Sources.Entrance(ForeverDB, d.name)
+            if spot then entrances[#entrances + 1] = { spot = spot, title = GP.Sources.DungeonName(d) } end
+        end
+        GP.Map.Quests(L("Dungeons to go"), ids, entrances)
+    end } })
 prepare.when = function() return (GP.settings.views.dungeons or "items") == "togo" end
 segmentPill({ "shop" }, "Source", 104, { { "all", "All" }, { "Vendors", "Vendors" }, { "Auction", "Auction house" }, { "Crafted", "Crafting" } }, "shopSource", "all")
 segmentPill({ "shop" }, "Sort", 90, { { "gain", "Score" }, { "price", "Price" }, { "value", "Per gold" } }, "shopSort", "gain")
@@ -627,7 +641,7 @@ local SOURCE_ICONS = {
     auction = "Interface\\Icons\\INV_Misc_Coin_04", questdone = "Interface\\RaidFrame\\ReadyCheck-Ready",
     questactive = "Interface\\GossipFrame\\ActiveQuestIcon",
 }
-local function sourceLine2(kind, title, sub, buttonText, callback)
+local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback)
     U.sourceLines.used = (U.sourceLines.used or 0) + 1
     local i = U.sourceLines.used
     local f = U.sourceLines[i]
@@ -643,6 +657,8 @@ local function sourceLine2(kind, title, sub, buttonText, callback)
         f.sub:SetWordWrap(false)
         f.button = S.Button(f, 110, 22, "", nil)
         f.button:SetPoint("RIGHT", f, "RIGHT", -6, 0)
+        f.map = S.Button(f, 60, 22, L("Map"), nil)
+        f.map:SetPoint("RIGHT", f.button, "LEFT", -6, 0)
         U.sourceLines[i] = f
     end
     local width = (U.detail:GetWidth() or 300) - 24
@@ -651,8 +667,9 @@ local function sourceLine2(kind, title, sub, buttonText, callback)
     f:SetSize(width, 38)
     f:SetBackdropColor(.122, .141, .172, 1)
     f.icon:SetTexture(SOURCE_ICONS[kind] or SOURCE_ICONS.world)
-    f.title:SetWidth(width - 160)
-    f.sub:SetWidth(width - 160)
+    local reserved = 160 + (mapCallback and 66 or 0)
+    f.title:SetWidth(width - reserved)
+    f.sub:SetWidth(width - reserved)
     f.title:SetText(title or "")
     f.sub:SetText(sub or "")
     f.button:SetShown(callback ~= nil)
@@ -660,6 +677,10 @@ local function sourceLine2(kind, title, sub, buttonText, callback)
         f.button:SetText(buttonText)
         f.button:SetScript("OnClick", callback)
     end
+    f.map:SetShown(mapCallback ~= nil)
+    f.map:ClearAllPoints()
+    if callback then f.map:SetPoint("RIGHT", f.button, "LEFT", -6, 0) else f.map:SetPoint("RIGHT", f, "RIGHT", -6, 0) end
+    if mapCallback then f.map:SetScript("OnClick", mapCallback) end
     f:Show()
     detailY = detailY + 42
 end
@@ -675,7 +696,8 @@ local function section(title)
     detailY = detailY + 8
     detailLine("GameFontNormal", title, C.gold)
 end
-local function actions(first, second)
+-- Up to three buttons in a row: the first gold, the others plain (the third is usually "Map").
+local function actions(first, second, third)
     detailY = detailY + 4
     U.action:SetText(first[1])
     U.action:SetWidth(first[3] or 170)
@@ -691,6 +713,14 @@ local function actions(first, second)
         U.action2:ClearAllPoints()
         U.action2:SetPoint("LEFT", U.action, "RIGHT", 8, 0)
         U.action2:Show()
+    end
+    if third then
+        U.action3:SetText(third[1])
+        U.action3:SetWidth(third[3] or 90)
+        U.action3:SetScript("OnClick", third[2])
+        U.action3:ClearAllPoints()
+        U.action3:SetPoint("LEFT", second and U.action2 or U.action, "RIGHT", 8, 0)
+        U.action3:Show()
     end
     detailY = detailY + 34
 end
@@ -856,6 +886,7 @@ local function resetDetail()
     S.HideMetrics(U.detail)
     U.action:Hide()
     U.action2:Hide()
+    U.action3:Hide()
     U.wishButton:Hide()
     U.togoButton:Hide()
     U.orderUp:Hide()
@@ -1009,8 +1040,13 @@ local function questBlock(row)
         detailLine("GameFontDisableSmall", L("Choice reward: you get one item of this quest. GearPilot shows the best one for you."), C.muted)
     end
     local chain = GP.Route.Chain(row.sourceID)
-    actions({ L("Waypoint to quest giver"), function() GP.Route.ToGiver(row.sourceID) end },
-        #chain > 1 and { (L("Whole chain (%d)")):format(#chain), function() GP.Route.ToChain(row.sourceID) end } or nil)
+    local map = { L("Map"), function() GP.Map.Chain(row.sourceID) end, 90 }
+    if #chain > 1 then
+        actions({ L("Waypoint to quest giver"), function() GP.Route.ToGiver(row.sourceID) end },
+            { (L("Whole chain (%d)")):format(#chain), function() GP.Route.ToChain(row.sourceID) end }, map)
+    else
+        actions({ L("Waypoint to quest giver"), function() GP.Route.ToGiver(row.sourceID) end }, map)
+    end
     if #chain > 1 then chainSteps(chain, row.sourceID) end
 end
 
@@ -1298,7 +1334,8 @@ local function showZone(zone)
     detailY = detailY + 60
     local ids = {}
     for _, result in ipairs(zone.results) do ids[#ids + 1] = result.entry.row.sourceID end
-    actions({ (L("Waypoints to all quest givers (%d)")):format(#ids), function() GP.Route.ToMany(ids) end, 260 })
+    actions({ (L("Waypoints to all quest givers (%d)")):format(#ids), function() GP.Route.ToMany(ids) end, 260 },
+        { L("Map"), function() GP.Map.Quests(zone.zone, ids) end, 90 })
     section(L("Quests in this zone"))
     for _, result in ipairs(zone.results) do
         local row = result.entry.row
@@ -1402,7 +1439,10 @@ local function showDungeon(dungeon, profile, equipped)
     local nextSteps = GP.Togo.NextSteps(quests)
     local first = entrance and { L("Waypoint to the entrance"), function() GP.Route.ToSpot(entrance, name) end, 200 } or nil
     local second = #nextSteps > 0 and { (L("Collect quests (%d)")):format(#nextSteps), function() GP.Route.ToMany(nextSteps) end, 170 } or nil
-    if first then actions(first, second) elseif second then actions(second) end
+    local map = (entrance or #nextSteps > 0) and { L("Map"), function()
+        GP.Map.Quests(name, nextSteps, entrance and { { spot = entrance, title = name } } or nil)
+    end, 90 } or nil
+    if first then actions(first, second, map) elseif second then actions(second, map) end
     -- Quests
     if #quests > 0 then
         section(L("Quests") .. "  |cff9dabb8" .. (L("%d of %d done"):format(#quests - open, #quests)) .. "|r")
@@ -1430,7 +1470,10 @@ local function showDungeon(dungeon, profile, equipped)
                     button, callback = L("Waypoint"), function() GP.Route.ToGiver(info.id) end
                 end
             end
-            sourceLine2(kind, title, table.concat(parts, " · "), button, callback)
+            local mapCallback = not info.done and function()
+                if #chain > 1 then GP.Map.Chain(info.id) else GP.Map.Quests(title, { info.id }) end
+            end or nil
+            sourceLine2(kind, title, table.concat(parts, " · "), button, callback, mapCallback)
         end
     end
     -- Bosses and loot.

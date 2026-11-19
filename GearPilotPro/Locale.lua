@@ -354,6 +354,10 @@ local de = {
         "Dungeon-Details: deine Upgrades und der erwartete Gewinn eines Durchlaufs, alle Quests des Dungeons mit Questreihe und bester Belohnung und die Beute jedes Bosses (deine Upgrades hell, Wunschteile markiert). Dungeons außerhalb deines Bereichs bleiben sichtbar, abgeschwächt.",
     ["To go: your own list of dungeons to run. Order it, collect every quest you need before the runs in one go (nearest first), and see how often you have been there."] =
         "To go: deine eigene Liste von Dungeons. Ordne sie, sammle alle nötigen Quests vor den Läufen in einem Rutsch ein (nächste zuerst) und sieh, wie oft du dort warst.",
+    -- 1.1.0 map
+    ["Map"] = "Karte", ["World map"] = "Weltkarte", ["Click: waypoint"] = "Klick: Wegpunkt", ["Dungeons to go"] = "Dungeons to go",
+    ["GearPilot cannot draw this map. Open it on the world map instead."] = "Diese Karte kann GearPilot nicht zeichnen. Öffne sie stattdessen auf der Weltkarte.",
+    ["No positions known for these points."] = "Für diese Punkte sind keine Positionen bekannt.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

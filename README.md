@@ -24,6 +24,10 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 - **Equipped gear:** every slot with its score and the values that count for your profile. **Weapon setup** compares your best two-hand weapon with your best main hand + off hand (a second weapon for dual wielders, shield or held item otherwise), from what you wear and carry or from every source; an off-hand weapon's DPS counts half.
 - **Settings:** level range, stat profile (automatic from your talents, six built-in profiles or your own, Pawn / WoWSims import), sources, minimum drop chance and the helpers below.
 
+## Map
+
+A map window in GearPilot's look opens with "Map": quest givers of a chain (numbered), all quest givers of a zone, the quests to collect before a dungeon with its entrance, or everything on your to go list. Zoom with the mouse wheel or + and −, drag to move, hover a point for quest and giver, click it for a waypoint. Points in several zones get one tab per zone; a button opens the zone on the game's world map. The map art comes from the game client (C_Map art layers).
+
 ## Helpers outside the window
 
 - **Item tooltip:** how much better or worse an item is than what you wear, with a green or red arrow, plus a weapon skill note.
