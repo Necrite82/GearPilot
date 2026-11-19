@@ -8,5 +8,7 @@ required-dependencies:
 
 ignore:
   - tests
+  - tools
+  - dist
   - .github
   - README.md
