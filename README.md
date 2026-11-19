@@ -4,7 +4,7 @@ GearPilot finds equipment upgrades for **World of Warcraft: Forever**: items in 
 
 ## Install (development build)
 
-Copy the inner `GearPilotPro` folder into `World of Warcraft/_forever_/Interface/AddOns/` and open the window with `/gpp` or `/gearpilotpro`. If an older `GearPilot` folder from a previous development build is there, delete it.
+Download `dist/GearPilot-<version>.zip` from the repository, unpack it and copy the `GearPilotPro` folder into `World of Warcraft/_forever_/Interface/AddOns/` and open the window with `/gpp` or `/gearpilotpro`. If an older `GearPilot` folder from a previous development build is there, delete it.
 
 Quest rewards and dungeon drops need the **ForeverDB** addon ([CurseForge](https://www.curseforge.com/wow/addons/forever-db), [GitHub](https://github.com/foreverfraddons/forever-db)). The CurseForge app installs it together with GearPilot; for a manual install copy its `ForeverDB` folder next to `GearPilotPro`. Bag upgrades work without it.
 
@@ -29,7 +29,7 @@ Quest rewards (`rew`, `qrw`), quest details (`quest`, `qx`, `qg`) and drops (`dr
 
 ## Checks
 
-`lua5.1 tests/run.lua` runs the tooltip parser, planner and source checks; GitHub Actions also runs a Lua syntax check.
+`lua5.1 tests/run.lua` runs the tooltip parser, planner and source checks. `python3 tools/build_release.py` rebuilds the install archive in `dist/`; GitHub Actions checks the Lua syntax, runs the tests and fails when the archive does not match the source.
 
 ## License
 

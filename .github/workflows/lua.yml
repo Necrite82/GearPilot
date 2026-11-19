@@ -13,3 +13,5 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.1
       - run: find GearPilotPro tests -name '*.lua' -exec luac5.1 -p {} +
       - run: lua5.1 tests/run.lua
+      - name: Install archive matches the source
+        run: python3 tools/build_release.py --check
