@@ -145,7 +145,7 @@ local function bounded(value, fallback, lower, upper)
     return math.max(lower, math.min(upper, math.floor(value)))
 end
 local chances = { [0.01] = true, [0.02] = true, [0.05] = true, [0.1] = true }
-local pages = { upgrades = true, quests = true, dungeons = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
+local pages = { upgrades = true, route = true, quests = true, dungeons = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
 local function initialize()
     local player = GP.Player()
     local saved = type(GearPilotProSettings) == "table" and GearPilotProSettings or {}
@@ -188,6 +188,9 @@ local function initialize()
     saved.togo = type(saved.togo) == "table" and saved.togo or {}
     if saved.togoAutoRemove == nil then saved.togoAutoRemove = false end
     if saved.mapReveal == nil then saved.mapReveal = true end
+    -- 1.3.0 quest route
+    saved.routeFocus = (saved.routeFocus == "xp" or saved.routeFocus == "gear") and saved.routeFocus or "balanced"
+    saved.routeDungeon = saved.routeDungeon == true
     GearPilotProSettings = saved
     GP.settings = saved
 end

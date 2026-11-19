@@ -24,6 +24,10 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 - **Equipped gear:** every slot with its score and the values that count for your profile. **Weapon setup** compares your best two-hand weapon with your best main hand + off hand (a second weapon for dual wielders, shield or held item otherwise), from what you wear and carry or from every source; an off-hand weapon's DPS counts half.
 - **Settings:** level range, stat profile (automatic from your talents, six built-in profiles or your own, Pawn / WoWSims import), sources, minimum drop chance and the helpers below.
 
+## Quest route
+
+The page "Quest route" plans the quests worth most at your level: every quest you can take now (level, pre-quests, faction, race, class; not grey, not done) and those in your log, valued by their experience plus the upgrade value of their best reward (focus: experience, balanced or gear). It picks the zone whose quests are worth most for the way there (with the nearest flight point of your faction when it is far) and orders the tasks nearest first: accept, objectives (creatures, objects and the creatures that drop quest items, where ForeverDB knows them), turn in; quests with unknown objectives are turned in last. "Go" sets the waypoint to the next task and moves on when you accept, complete or turn in a quest or reach an objective's place; "Map" shows the whole route. The plan is worked out again after a level up, quest changes and zone changes (`GearPilotPro/QuestRoute.lua`, world coordinates from ForeverDB's spawns).
+
 ## Quest experience
 
 Quest details, chain steps and dungeon quests show their experience; chains and dungeons show what is still open (pre-quests included). GearPilot asks the server for the quests it shows (`C_QuestLog.RequestLoadQuestByID`, then the quest's reward experience and money) and keeps the answers in `GearPilotProCache`; without an answer it takes ForeverDB's value and applies the Classic reduction for quests far below your level. `/gpp ep <questID>` tests one quest.
