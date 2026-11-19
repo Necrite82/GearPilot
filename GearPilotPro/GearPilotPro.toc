@@ -2,7 +2,7 @@
 ## Title: GearPilot
 ## Notes: Gear upgrades from your bags, quest rewards and dungeon drops for World of Warcraft: Forever.
 ## Notes-deDE: Ausrüstungs-Upgrades aus Taschen, Quest-Belohnungen und Dungeon-Beute für World of Warcraft: Forever.
-## Version: 0.5.1-dev.1
+## Version: 0.6.0-dev.1
 ## OptionalDeps: ForeverDB
 ## IconTexture: Interface\AddOns\GearPilotPro\Media\GearPilot
 ## AddonCompartmentFunc: GearPilotPro_OnAddonCompartmentClick

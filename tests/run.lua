@@ -272,4 +272,16 @@ assert(P.Score({ stats = { SCHOOL_FROST = 10 } }, P.Profile("caster")) == 6, "bu
 local onlyQuest = P.ByDungeon({}, { res(nil, 7, "Razorfen Downs") })
 assert(#onlyQuest == 1 and onlyQuest[1].name == "Razorfen Downs" and onlyQuest[1].expected == 7 and #onlyQuest[1].results == 0)
 
+-- 0.6.0: chain status, grey quests, twins
+local steps = { { done = true }, {}, { active = true }, {}, {} }
+local doneCount, nextIndex, started = P.ChainStatus(steps)
+assert(steps[2].skipped and doneCount == 2 and nextIndex == 4 and started, "step 2 skipped, step 4 next")
+local fresh = { {}, {} }
+local d0, n0, s0 = P.ChainStatus(fresh)
+assert(d0 == 0 and n0 == 1 and not s0)
+assert(P.GreyLevel(40) == 31 and P.IsGrey(31, 40) and not P.IsGrey(32, 40) and P.GreyLevel(20) == 13 and not P.IsGrey(5, 5))
+local twins = S.Twins({ quest = { [286] = { "Return the Statuette" }, [98189] = { "Return the Statuette" }, [5] = { "Other" },
+    [6] = { "Same name" }, [7] = { "Same name" } } })
+assert(twins[286][1] == 98189 and twins[98189][1] == 286 and not twins[6], "only Classic <-> Forever pairs")
+
 print("GearPilot checks passed")

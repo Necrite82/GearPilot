@@ -17,6 +17,7 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 - **Quests:** items or **zones** (where questing pays most, with waypoints to every quest giver). Sort by score, distance or zone; dungeon quests are marked and can be hidden or shown alone. The details show the whole quest chain with waypoints (TomTom: an arrow per step; otherwise the game's map waypoint moves on by itself).
 - **Dungeons:** items with boss and drop chance, or **per dungeon** with the expected gain of one run (score gain × drop chance; unknown chances count as 10 %) and its dungeon quests.
 - **Buy & craft:** vendor gear (ForeverDB vendors of your faction, price estimated from the vendor sell price), the auction house (Auctionator prices) and recipes from CraftPilot's catalog; sort by score, price or score per gold, with a maximum price.
+- **Auction house:** upgrades from your last Auctionator scan (required level from 10 below your level), with the age of each price, a maximum price (presets or your own gold amount), sorting by score, price or score per gold, and a search button while the auction house is open.
 - **Bags:** upgrades, or gear that **can go** (not usable for your class or worse than what you wear); items CraftPilot reserves are never listed.
 - **Equipped gear:** every slot with its score and the values that count for your profile. **Weapon setup** compares your best two-hand weapon with your best main hand + off hand (a second weapon for dual wielders, shield or held item otherwise), from what you wear and carry or from every source; an off-hand weapon's DPS counts half.
 - **Settings:** level range, stat profile (automatic from your talents, six built-in profiles or your own, Pawn / WoWSims import), sources, minimum drop chance and the helpers below.
@@ -29,7 +30,7 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 - **Weapon skills:** a note when a weapon type is not learned yet or its skill is low.
 - **Minimap button** (drag it around the minimap; right click opens the settings) and an entry in the game's addon compartment.
 
-The window can be resized with the grip in the bottom right corner; size and position are saved. Quests limited to one race (e.g. humans only) are only shown to that race. Spell school damage (fire, frost, ...) is scored per school, so a Pawn fire scale does not count frost damage. Quest chains show every step with the game's quest icons: done, in your quest log, next.
+The window can be resized with the grip in the bottom right corner; size and position are saved. Quests limited to one race (e.g. humans only) are only shown to that race. Spell school damage (fire, frost, ...) is scored per school, so a Pawn fire scale does not count frost damage. Quest chains: skipped steps (breadcrumbs, optional quests) count as done, grey quests are marked, a filter shows only chains you have started, and quests whose alternative (exclusiveTo) you have done are hidden. A Classic quest and its Forever replacement count as done in either version. Quest chains show every step with the game's quest icons: done, in your quest log, next.
 
 ## Scoring
 

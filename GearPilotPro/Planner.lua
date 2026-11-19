@@ -363,6 +363,33 @@ function Planner.WeaponSets(pool, equipped, profile, class, level, maxLevel)
     return result
 end
 
+-- Grey quests: Classic's rule for the highest quest level that gives (almost) no experience.
+function Planner.GreyLevel(level)
+    if level <= 5 then return 0 end
+    if level <= 39 then return level - 5 - math.floor(level / 10) end
+    if level <= 59 then return level - 1 - math.floor(level / 5) end
+    return level - 9
+end
+function Planner.IsGrey(questLevel, playerLevel)
+    return type(questLevel) == "number" and questLevel > 0 and questLevel <= Planner.GreyLevel(playerLevel)
+end
+
+-- Chain status: a step before a done or accepted step counts as skipped when it is not done itself
+-- (breadcrumbs and optional quests). Marks step.skipped; returns done count (skipped included) and next index.
+function Planner.ChainStatus(steps)
+    local lastProgress = 0
+    for i, step in ipairs(steps) do
+        if step.done or step.active then lastProgress = i end
+    end
+    local done, nextIndex = 0, nil
+    for i, step in ipairs(steps) do
+        step.skipped = not step.done and not step.active and i < lastProgress or nil
+        if step.done or step.skipped then done = done + 1
+        elseif not step.active and not nextIndex then nextIndex = i end
+    end
+    return done, nextIndex, lastProgress > 0
+end
+
 -- Quest upgrades by zone: one entry per zone with the summed gain, best first.
 function Planner.ByZone(results)
     local zones, list = {}, {}
