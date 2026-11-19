@@ -367,6 +367,9 @@ local de = {
     ["Reward: "] = "Belohnung: ", ["Show all %d steps"] = "Alle %d Schritte zeigen", ["Show fewer steps"] = "Weniger Schritte zeigen",
     ["THOUSANDS_SEPARATOR"] = ".", ["The open quests give %s, pre-quests included."] = "Die offenen Quests geben %s, Vorquests mitgezählt.",
     ["XP"] = "EP", ["no value"] = "kein Wert",
+    -- 1.2.2
+    ["Close chain"] = "Reihe zuklappen", ["All open steps"] = "Alle offenen Schritte", ["Waypoints"] = "Wegpunkte",
+    ["Waypoints to every open step of this chain, in order."] = "Wegpunkte zu allen offenen Schritten dieser Reihe, der Reihe nach.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

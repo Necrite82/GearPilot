@@ -641,7 +641,7 @@ local SOURCE_ICONS = {
     auction = "Interface\\Icons\\INV_Misc_Coin_04", questdone = "Interface\\RaidFrame\\ReadyCheck-Ready",
     questactive = "Interface\\GossipFrame\\ActiveQuestIcon",
 }
-local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback)
+local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, indent)
     U.sourceLines.used = (U.sourceLines.used or 0) + 1
     local i = U.sourceLines.used
     local f = U.sourceLines[i]
@@ -661,9 +661,10 @@ local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback)
         f.map:SetPoint("RIGHT", f.button, "LEFT", -6, 0)
         U.sourceLines[i] = f
     end
-    local width = (U.detail:GetWidth() or 300) - 24
+    indent = indent or 0
+    local width = (U.detail:GetWidth() or 300) - 24 - indent
     f:ClearAllPoints()
-    f:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+    f:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12 + indent, -detailY)
     f:SetSize(width, 38)
     f:SetBackdropColor(.122, .141, .172, 1)
     f.icon:SetTexture(SOURCE_ICONS[kind] or SOURCE_ICONS.world)
@@ -1531,10 +1532,17 @@ local function showDungeon(dungeon, profile, equipped)
             local kind = info.done and "questdone" or info.active and "questactive" or "quest"
             local title = GP.Sources.QuestTitle(info.id, info.title) or ("#" .. info.id)
             if info.done then title = "|cff9dabb8" .. title .. "|r" end
+            -- A chain opens below its quest: every step with status, experience and a waypoint.
+            local openKey = "dungeon:" .. info.id
+            local expanded = #chain > 1 and GP.chainOpen[openKey]
             local button, callback
             if not info.done then
                 if #chain > 1 then
-                    button, callback = (L("Chain (%d)")):format(#chain), function() GP.Route.ToChain(info.id) end
+                    button = expanded and L("Close chain") or (L("Chain (%d)")):format(#chain)
+                    callback = function()
+                        GP.chainOpen[openKey] = not GP.chainOpen[openKey]
+                        GP.Render()
+                    end
                 else
                     button, callback = L("Waypoint"), function() GP.Route.ToGiver(info.id) end
                 end
@@ -1543,6 +1551,28 @@ local function showDungeon(dungeon, profile, equipped)
                 if #chain > 1 then GP.Map.Chain(info.id) else GP.Map.Quests(title, { info.id }) end
             end or nil
             sourceLine2(kind, title, table.concat(parts, " · "), button, callback, mapCallback)
+            if expanded then
+                local _, nextIndex = P.ChainStatus(chain)
+                for i, st in ipairs(chain) do
+                    local finished = st.done or st.skipped
+                    local status = st.done and ("|cff85d6a0" .. L("done") .. "|r") or st.skipped and L("skipped")
+                        or st.active and ("|cffe0b050" .. L("in quest log") .. "|r") or i == nextIndex and ("|cffe0b050" .. L("next") .. "|r") or nil
+                    local stepParts = { (st.giver or "?") .. (st.zone and (", " .. st.zone) or "") }
+                    if status then stepParts[#stepParts + 1] = status end
+                    local value = GP.QuestXP.Get(st.id, st.level)
+                    if not finished and value.xp and value.xp > 0 then stepParts[#stepParts + 1] = GP.QuestXP.Text(value.xp) end
+                    local stepTitle = ("%d. %s"):format(i, st.title or ("#" .. st.id))
+                    if finished then stepTitle = "|cff9dabb8" .. stepTitle .. "|r" end
+                    local stepKind = finished and "questdone" or st.active and "questactive" or "quest"
+                    local stepButton, stepCallback
+                    if not finished then
+                        stepButton, stepCallback = L("Waypoint"), function() GP.Route.ToGiver(st.id) end
+                    end
+                    sourceLine2(stepKind, stepTitle, table.concat(stepParts, " · "), stepButton, stepCallback, nil, 24)
+                end
+                sourceLine2("quest", L("All open steps"), L("Waypoints to every open step of this chain, in order."),
+                    L("Waypoints"), function() GP.Route.ToChain(info.id) end, nil, 24)
+            end
         end
     end
     -- Bosses and loot.
