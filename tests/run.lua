@@ -494,6 +494,11 @@ for _, q in ipairs(gearPlan.quests) do
     if q.id == 1 then assert(q.gain == 12 and q.reward.name == "Boots" and q.rewardQuest == 2) end
 end
 
+-- 1.3.3: creature names you have seen (in your language) win over ForeverDB's English ones.
+GP.Names = { Get = function(id) return id == 2 and "Rüstmeister" or nil end }
+assert(S.CreatureName(vendorDb, 2) == "Rüstmeister" and S.CreatureName(vendorDb, 1) == "Boss" and S.GiverName(vendorDb, "c2") == "Rüstmeister")
+GP.Names = nil
+
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)

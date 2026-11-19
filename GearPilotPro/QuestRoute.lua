@@ -40,13 +40,13 @@ QR.Spot = spot
 local function objectives(db, questID, near)
     local detail = db.qx and db.qx[questID] or {}
     local out = {}
-    local function add(ref, label, itemID)
+    local function add(ref, label, itemID, npcID)
         local p = spot(db, ref, near)
-        if p and #out < 4 then out[#out + 1] = { p = p, label = label, item = itemID } end
+        if p and #out < 4 then out[#out + 1] = { p = p, label = label, item = itemID, npc = npcID } end
     end
     for _, npcID in ipairs(type(detail[8]) == "table" and detail[8] or {}) do
         local npc = db.npc and db.npc[npcID]
-        add("c" .. npcID, npc and npc[1])
+        add("c" .. npcID, npc and npc[1], nil, npcID)
     end
     for _, objectID in ipairs(type(detail[9]) == "table" and detail[9] or {}) do
         local object = db.obj and db.obj[objectID]
@@ -206,7 +206,7 @@ function QR.Order(quests, position, complete)
         end
         if not (complete and complete(q.id)) then
             for _, o in ipairs(q.objectives) do
-                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item }
+                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item, npc = o.npc }
             end
         end
         tasks[#tasks + 1] = { kind = "turnin", quest = q, p = q.ender }
@@ -439,6 +439,7 @@ function QR.TaskText(t)
     if t.kind == "objective" then
         -- Quest items by the game's (local) name; creatures and objects as ForeverDB names them.
         local label = t.label
+        if t.npc and GP.Names then label = GP.Names.Get(t.npc) or label end
         if t.item and GP.ItemData then
             local item = GP.ItemData(t.item)
             if item and item.name then label = item.name end
