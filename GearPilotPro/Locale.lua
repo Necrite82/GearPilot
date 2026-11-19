@@ -370,6 +370,10 @@ local de = {
     -- 1.2.2
     ["Close chain"] = "Reihe zuklappen", ["All open steps"] = "Alle offenen Schritte", ["Waypoints"] = "Wegpunkte",
     ["Waypoints to every open step of this chain, in order."] = "Wegpunkte zu allen offenen Schritten dieser Reihe, der Reihe nach.",
+    -- 1.2.3
+    ["Recipe"] = "Rezept", ["Materials and cost"] = "Material und Kosten",
+    ["CraftPilot works out the materials with the prices of your last auction house scan."] =
+        "CraftPilot rechnet das Material mit den Preisen deines letzten Auktionshaus-Scans zusammen.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

@@ -193,6 +193,21 @@ local function initialize()
 end
 
 -- Other addons ------------------------------------------------------------------------------------------------
+-- Opens a recipe in CraftPilot: its profession, the recipe selected (as CraftPilot's own item database does).
+-- Falls back to CraftPilot's item database for the product.
+function GP.OpenRecipe(profession, recipeID, itemID)
+    local cp = GP.CraftPilot()
+    if not cp then return end
+    if cp.OpenRecipe and pcall(cp.OpenRecipe, cp, profession, recipeID) then return end
+    local ok = cp.ChangeView and cp.OpenTab and cp.db and cp.db.ui and pcall(function()
+        cp:ChangeView(profession, false)
+        cp.db.ui.selectedRecipes = cp.db.ui.selectedRecipes or {}
+        cp.db.ui.selectedRecipes[profession] = recipeID
+        cp:OpenTab("now")
+    end)
+    if not ok and cp.OpenItemInDB and itemID then pcall(cp.OpenItemInDB, cp, itemID) end
+end
+
 function GP.CraftPilot()
     local cp = rawget(_G, "CraftPilotPro")
     if type(cp) == "table" and type(cp.CatalogData) == "table" then return cp end

@@ -22,6 +22,9 @@ Stats.keys = {
     ITEM_MOD_DAMAGE_PER_SECOND_SHORT = "DPS", RESISTANCE0_NAME = "ARMOR",
 }
 
+-- Rating points per 1 % at level 60 (the rate the client uses for ratings on Classic items).
+Stats.ratingPerPercent = { CRIT = 14, SCRIT = 14, HIT = 10, SHIT = 8, DODGE = 12, PARRY = 20, BLOCK = 5 }
+
 -- Lines that are not permanent item values.
 local skip = { "use:", "benutzen:", "chance on hit", "trefferchance:", "bei treffer", "set:", "cooldown", "abklingzeit" }
 -- Spell school words -> GearPilot key; each school keeps its own key so a fire scale does not count frost.
@@ -92,6 +95,16 @@ function Stats.Combine(raw, lines, item)
     end
     for key, value in pairs(fromTip) do
         if not out[key] or out[key] == 0 then out[key] = value end
+    end
+    -- Crit, hit, dodge, parry and block count per 1 %. The Forever client's item stats give these as ratings
+    -- (an item with "+1 % crit" says 14), the tooltip says the percent: the tooltip wins; a rating alone is
+    -- converted at the level 60 rate.
+    for key, rate in pairs(Stats.ratingPerPercent) do
+        if fromTip[key] then
+            out[key] = fromTip[key]
+        elseif out[key] and out[key] > 3 then
+            out[key] = out[key] / rate
+        end
     end
     if out.DPS and item then
         local equip = item.equip
