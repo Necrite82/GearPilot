@@ -69,10 +69,19 @@ function Sources.ClassAllowed(mask, class)
     return bit(mask, classBits[class])
 end
 
+-- Creature name: the one you have seen in your language (GP.Names), else ForeverDB's.
+local function creatureName(db, id)
+    local known = GP.Names and GP.Names.Get(id)
+    if known then return known end
+    local npc = db.npc and db.npc[id]
+    return npc and npc[1] or nil
+end
+Sources.CreatureName = creatureName
 local function npcName(db, ref)
     if type(ref) ~= "string" then return nil end
     local kind, id = ref:sub(1, 1), tonumber(ref:sub(2))
-    local entry = kind == "c" and db.npc and db.npc[id] or kind == "o" and db.obj and db.obj[id] or nil
+    if kind == "c" then return creatureName(db, id) end
+    local entry = kind == "o" and db.obj and db.obj[id] or nil
     return entry and entry[1] or nil
 end
 Sources.GiverName = npcName
@@ -170,7 +179,7 @@ Sources.BossAsVendor = bossAsVendor
 -- Boss name for a drop: ForeverDB's creature name, else ATT's.
 local function bossName(db, npcID, boss)
     local npc = db.npc and db.npc[npcID]
-    return npc and npc[1] or (boss and boss.name)
+    return creatureName(db, npcID) or (boss and boss.name)
 end
 
 -- Equipment the player's class can wear or wield: armor (4) and weapons (2), quality above poor.
@@ -260,7 +269,7 @@ function Sources.Build(db, options)
                 local accepted = key and (chance >= minChance or (chance == 0 and (forever or rank >= 1 or boss)))
                 if accepted and (not best[name] or chance > best[name].chance) then
                     best[name] = { key = key, name = name, raid = raid, forever = forever, mapID = mapID,
-                        npc = npc and npc[1], level = npc and (npc[4] or npc[3]), chance = chance }
+                        npc = npc and creatureName(db, npcID), level = npc and (npc[4] or npc[3]), chance = chance }
                 end
             end
             -- Boss loot ATT knows: an unknown rate gets the boss's loot table share as estimate.
@@ -296,7 +305,7 @@ function Sources.Build(db, options)
                 local friendly = not side or not faction or side == "AH"
                     or (faction == "Alliance" and side == "A") or (faction == "Horde" and side == "H")
                 local npc = db.npc and db.npc[npcID]
-                if friendly and npc and not bossAsVendor(db, itemID, npcID, att) then list[#list + 1] = { ref = "c" .. npcID, name = npc[1] } end
+                if friendly and npc and not bossAsVendor(db, itemID, npcID, att) then list[#list + 1] = { ref = "c" .. npcID, name = creatureName(db, npcID) } end
             end
             if #list > 0 then
                 rows[#rows + 1] = { itemID = itemID, source = "Vendors", sourceID = "v" .. itemID, level = item[3] or 1,
@@ -376,7 +385,7 @@ function Sources.ItemSources(db, itemID, options)
             local entry = dungeons[name]
             if not entry or chance > entry.rawChance then
                 local new = { kind = "dungeon", key = key, name = name, raid = raid, forever = forever, mapID = mapID,
-                    boss = npc and npc[1], level = npc and (npc[4] or npc[3]), rawChance = chance,
+                    boss = npc and creatureName(db, npcID), level = npc and (npc[4] or npc[3]), rawChance = chance,
                     chance = chance > 0 and chance / 10000 or nil }
                 if entry then
                     for k, v in pairs(new) do entry[k] = v end
@@ -386,7 +395,7 @@ function Sources.ItemSources(db, itemID, options)
                 end
             end
         elseif npc then
-            list[#list + 1] = { kind = "mob", npcRef = "c" .. npcID, name = npc[1], level = npc[4] or npc[3],
+            list[#list + 1] = { kind = "mob", npcRef = "c" .. npcID, name = creatureName(db, npcID), level = npc[4] or npc[3],
                 rank = npc[5], rawChance = chance, chance = chance > 0 and chance / 10000 or nil }
         end
     end
@@ -408,7 +417,7 @@ function Sources.ItemSources(db, itemID, options)
             or (options.faction == "Alliance" and side == "A") or (options.faction == "Horde" and side == "H")
         local npc = db.npc and db.npc[npcID]
         if friendly and npc and not bossAsVendor(db, itemID, npcID, att) then
-            list[#list + 1] = { kind = "vendor", npcRef = "c" .. npcID, name = npc[1] }
+            list[#list + 1] = { kind = "vendor", npcRef = "c" .. npcID, name = creatureName(db, npcID) }
         end
     end
     local world = db.world and db.world[itemID]
@@ -659,7 +668,7 @@ function Sources.DropIndex(db, data, ids)
             local _, _, _, _, mapID = dungeonOf(db, npcID, att)
             local spawns = db.spw and db.spw["c" .. npcID]
             local map = mapID or (spawns and spawns[1] and Sources.instances[spawns[1][1]] and spawns[1][1])
-            add(id, npcID, chance, map, npc and npc[1])
+            add(id, npcID, chance, map, npc and creatureName(db, npcID))
         end
         for _, found in ipairs(att and att.items[id] or {}) do
             local _, _, _, _, mapID = attDungeon(db, found.instance)
