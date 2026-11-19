@@ -11,7 +11,7 @@ local function number(v)
     if math.abs(v - math.floor(v + .5)) < .05 then return tostring(math.floor(v + .5)) end
     return ("%.1f"):format(v)
 end
-local function signed(v) return (v >= 0 and "+" or "−") .. number(math.abs(v)) end
+local function signed(v) return (v >= 0 and "+" or "-") .. number(math.abs(v)) end
 local function tooltip(owner, title, lines)
     owner:HookScript("OnEnter", function()
         GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
@@ -33,12 +33,31 @@ frame:SetToplevel(true)
 frame:SetClampedToScreen(true)
 frame:SetClampRectInsets(-SIDE, 0, 0, 0)
 frame:SetMovable(true)
+frame:SetResizable(true)
+if frame.SetResizeBounds then frame:SetResizeBounds(W, H, 1300, 950) end
 frame:EnableMouse(true)
 frame:Hide()
 tinsert(UISpecialFrames, "GearPilotProWindow")
 
+local function saveWindow()
+    if not GP.settings then return end
+    local point, _, relative, x, y = frame:GetPoint()
+    GP.settings.window = { point = point, relative = relative, x = x, y = y, w = frame:GetWidth(), h = frame:GetHeight() }
+end
 local function startMove() frame:StartMoving() end
-local function stopMove() frame:StopMovingOrSizing() end
+local function stopMove() frame:StopMovingOrSizing(); saveWindow() end
+-- Size grip in the bottom right corner, as in CraftPilot.
+local grip = CreateFrame("Button", nil, frame)
+grip:SetSize(18, 18)
+grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+grip:SetScript("OnMouseDown", function() frame:StartSizing("BOTTOMRIGHT") end)
+grip:SetScript("OnMouseUp", function() frame:StopMovingOrSizing(); saveWindow() end)
+local function listWidth()
+    return math.max(LIST, math.floor((frame:GetWidth() - 36) * 0.42))
+end
 local header = CreateFrame("Frame", nil, frame)
 header:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
 header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
@@ -60,11 +79,11 @@ line:SetColorTexture(C.border[1], C.border[2], C.border[3], 1)
 
 -- Header chips: level window and data status. A click opens the settings.
 local function chip(width)
-    local b = CreateFrame("Button", nil, header, "BackdropTemplate")
-    S.Round(b, true)
+    local b = CreateFrame("Frame", nil, header, "BackdropTemplate")
+    S.Round(b)
+    b:EnableMouse(true)
     b:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1)
     b:SetFrameLevel(header:GetFrameLevel() + 5)
-    b:RegisterForClicks("LeftButtonUp")
     b:SetSize(width, 22)
     b.dot = b:CreateTexture(nil, "OVERLAY")
     b.dot:SetSize(7, 7)
@@ -72,7 +91,6 @@ local function chip(width)
     b.dot:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
     b.label = S.Text(b, "GameFontHighlightSmall", 21, 5, width - 28)
     b.label:SetWordWrap(false)
-    b:SetScript("OnClick", function() GP.Open("settings") end)
     return b
 end
 U.dataChip = chip(130)
@@ -80,11 +98,11 @@ U.dataChip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, -30)
 U.rangeChip = chip(184)
 U.rangeChip:SetPoint("RIGHT", U.dataChip, "LEFT", -8, 0)
 tooltip(U.rangeChip, function() return L("Level range") end, function()
-    return { L("Quests and dungeons in this range are compared. Bag items are always compared."), L("Click: settings") }
+    return { L("Quests and dungeons in this range are compared. Bag items are always compared.") }
 end)
 tooltip(U.dataChip, "ForeverDB", function()
     local build = GP.Sources.BuildDate()
-    if build then return { L("Quest rewards and dungeon drops from ForeverDB (GPL-3.0)."), L("Data from ") .. build, L("Click: settings") } end
+    if build then return { L("Quest rewards and dungeon drops from ForeverDB (GPL-3.0)."), L("Data from ") .. build } end
     return { L("ForeverDB is not installed. Quests and dungeons need it; the CurseForge app installs it with GearPilot.") }
 end)
 
@@ -265,12 +283,14 @@ U.action:Hide()
 U.action2 = S.Button(U.detail, 120, 26, "", nil)
 U.action2:Hide()
 
--- Filter bar above the list: one or two rows of segment groups, depending on the page.
-U.bar = CreateFrame("Frame", nil, frame)
+-- Filter bar above the list: a panel with one or two rows; every row has the same columns, captions in a
+-- fixed-width column so the option groups line up.
+U.bar = S.Surface(frame, "panel")
 U.bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -TOP)
 U.bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -TOP)
-U.bar:SetHeight(64)
+U.bar:SetHeight(44)
 U.bar.groups = {}
+local CAPTION, COLUMN2 = 104, 372
 local function setting(path)
     local s = GP.settings
     if path:find("%.") then
@@ -289,15 +309,15 @@ local function setSetting(path, value)
         s[path] = value
     end
 end
-local function segmentGroup(page, rowIndex, x, label, width, options, field, default)
+local function segmentGroup(page, rowIndex, column, label, width, options, field, default)
     local holder = CreateFrame("Frame", nil, U.bar)
-    holder:SetPoint("TOPLEFT", U.bar, "TOPLEFT", x, -(rowIndex - 1) * 34)
-    holder:SetSize(10, 28)
-    local caption = S.Text(holder, "GameFontDisableSmall", 0, 8, 0, L(label))
-    caption:SetWidth(0)
-    local captionWidth = math.max(56, math.floor((caption:GetStringWidth() or 56) + 10))
+    holder:SetPoint("TOPLEFT", U.bar, "TOPLEFT", column == 1 and 12 or COLUMN2, -(8 + (rowIndex - 1) * 34))
+    holder:SetSize(CAPTION + #options * width + 6, 28)
+    local caption = S.Text(holder, "GameFontHighlightSmall", 0, 8, CAPTION - 8, L(label))
+    caption:SetTextColor(.72, .70, .66)
+    caption:SetWordWrap(false)
     local group = S.Surface(holder, "raised")
-    group:SetPoint("TOPLEFT", holder, "TOPLEFT", captionWidth, 0)
+    group:SetPoint("TOPLEFT", holder, "TOPLEFT", CAPTION, 0)
     group:SetSize(#options * width + 6, 28)
     holder.page, holder.row, holder.buttons = page, rowIndex, {}
     for i, option in ipairs(options) do
@@ -310,14 +330,17 @@ local function segmentGroup(page, rowIndex, x, label, width, options, field, def
         holder.buttons[#holder.buttons + 1] = b
     end
     U.bar.groups[#U.bar.groups + 1] = holder
-    return x + captionWidth + #options * width + 24
 end
-local x = segmentGroup("quests", 1, 0, "View", 96, { { "items", "Items" }, { "zones", "Zones" } }, "views.quests", "items")
-segmentGroup("quests", 1, x, "Sort", 82, { { "gain", "Score" }, { "distance", "Distance" }, { "zone", "Zone" } }, "questSort", "gain")
-segmentGroup("quests", 2, 0, "Dungeon quests", 82, { { "show", "Show" }, { "hide", "Hide" }, { "only", "Only" } }, "dungeonQuests", "show")
-segmentGroup("dungeons", 1, 0, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" } }, "views.dungeons", "items")
-segmentGroup("shop", 1, 0, "Source", 104, { { "all", "All" }, { "Vendors", "Vendors" }, { "Auction", "Auction house" }, { "Crafted", "Crafting" } }, "shopSource", "all")
-segmentGroup("bags", 1, 0, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", "Can go" } }, "views.bags", "upgrades")
+segmentGroup("quests", 1, 1, "View", 96, { { "items", "Items" }, { "zones", "Zones" } }, "views.quests", "items")
+segmentGroup("quests", 1, 2, "Sort", 76, { { "gain", "Score" }, { "distance", "Distance" }, { "zone", "Zone" } }, "questSort", "gain")
+segmentGroup("quests", 2, 1, "Dungeon quests", 96, { { "show", "Show" }, { "hide", "Hide" }, { "only", "Only" } }, "dungeonQuests", "show")
+segmentGroup("dungeons", 1, 1, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" } }, "views.dungeons", "items")
+segmentGroup("shop", 1, 1, "Source", 104, { { "all", "All" }, { "Vendors", "Vendors" }, { "Auction", "Auction house" }, { "Crafted", "Crafting" } }, "shopSource", "all")
+segmentGroup("shop", 2, 1, "Sort", 82, { { "gain", "Score" }, { "price", "Price" }, { "value", "Per gold" } }, "shopSort", "gain")
+segmentGroup("shop", 2, 2, "Max. price", 58, { { 0, "All" }, { 10000, "1g" }, { 100000, "10g" }, { 500000, "50g" } }, "shopMax", 0)
+segmentGroup("bags", 1, 1, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", "Can go" } }, "views.bags", "upgrades")
+segmentGroup("gear", 1, 1, "View", 110, { { "worn", "Equipped" }, { "weapons", "Weapon setup" } }, "views.gear", "worn")
+segmentGroup("gear", 1, 2, "Weapons from", 110, { { "own", "Worn & bags" }, { "all", "All sources" } }, "weaponPool", "own")
 local function barRows(page)
     local rows = 0
     for _, holder in ipairs(U.bar.groups) do
@@ -329,6 +352,7 @@ local function barRows(page)
         end
     end
     U.bar:SetShown(rows > 0)
+    U.bar:SetHeight(rows * 34 + 10)
     return rows
 end
 
@@ -488,6 +512,99 @@ local function statLines(diff, profile)
     end
 end
 
+-- Quest chain as steps: game quest icons (green check = done, yellow ? = in your quest log, yellow ! = next,
+-- grey ! = later), a connector line, and the next open step highlighted.
+U.steps = {}
+local ICON_DONE = "Interface\\RaidFrame\\ReadyCheck-Ready"
+local ICON_ACTIVE = "Interface\\GossipFrame\\ActiveQuestIcon"
+local ICON_OPEN = "Interface\\GossipFrame\\AvailableQuestIcon"
+local function step(i)
+    local f = U.steps[i]
+    if f then return f end
+    f = CreateFrame("Frame", nil, U.detail, "BackdropTemplate")
+    S.Round(f)
+    f:SetHeight(40)
+    f.stripe = f:CreateTexture(nil, "OVERLAY")
+    f.stripe:SetWidth(2)
+    f.stripe:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -5)
+    f.stripe:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 5)
+    f.stripe:SetColorTexture(.91, .68, .31, 1)
+    f.line = f:CreateTexture(nil, "BACKGROUND")
+    f.line:SetWidth(2)
+    f.line:SetColorTexture(C.border[1] + .08, C.border[2] + .08, C.border[3] + .08, 1)
+    f.icon = f:CreateTexture(nil, "ARTWORK")
+    f.icon:SetSize(18, 18)
+    f.icon:SetPoint("LEFT", f, "LEFT", 10, 0)
+    f.title = S.Text(f, "GameFontHighlightSmall", 36, 6, 200)
+    f.title:SetWordWrap(false)
+    f.sub = S.Text(f, "GameFontDisableSmall", 36, 22, 200)
+    f.sub:SetWordWrap(false)
+    f.badge = S.Text(f, "GameFontHighlightSmall", 0, 13, 100, "", "RIGHT")
+    f.badge:ClearAllPoints()
+    f.badge:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -13)
+    U.steps[i] = f
+    return f
+end
+U.progress = { track = U.detail:CreateTexture(nil, "ARTWORK"), fill = U.detail:CreateTexture(nil, "OVERLAY") }
+U.progress.track:SetHeight(4)
+U.progress.track:SetColorTexture(.15, .17, .2, 1)
+U.progress.fill:SetHeight(4)
+U.progress.fill:SetColorTexture(.52, .84, .63, 1)
+local function hideSteps()
+    for _, f in ipairs(U.steps) do f:Hide() end
+    U.progress.track:Hide()
+    U.progress.fill:Hide()
+end
+local function chainSteps(chain, targetID)
+    local done, nextIndex = 0, nil
+    for i, st in ipairs(chain) do
+        if st.done then done = done + 1 elseif not st.active and not nextIndex then nextIndex = i end
+    end
+    local width = (U.detail:GetWidth() or 300) - 24
+    detailY = detailY + 8
+    detailLine("GameFontNormal", L("Quest chain") .. "  |cff9dabb8" .. (L("%d of %d done"):format(done, #chain)) .. "|r", C.gold)
+    U.progress.track:ClearAllPoints()
+    U.progress.track:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+    U.progress.track:SetWidth(width)
+    U.progress.fill:ClearAllPoints()
+    U.progress.fill:SetPoint("TOPLEFT", U.progress.track, "TOPLEFT", 0, 0)
+    U.progress.fill:SetWidth(math.max(1, width * done / #chain))
+    U.progress.track:Show()
+    U.progress.fill:SetShown(done > 0)
+    detailY = detailY + 12
+    for i, st in ipairs(chain) do
+        local f = step(i)
+        local isNext = i == nextIndex
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+        f:SetWidth(width)
+        if isNext then f:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1) else f:SetBackdropColor(0, 0, 0, 0) end
+        f.stripe:SetShown(isNext)
+        f.icon:SetTexture(st.done and ICON_DONE or st.active and ICON_ACTIVE or ICON_OPEN)
+        f.icon:SetDesaturated(not st.done and not st.active and not isNext)
+        f.icon:SetAlpha((st.done or st.active or isNext) and 1 or .55)
+        f.line:ClearAllPoints()
+        f.line:SetPoint("TOP", f.icon, "BOTTOM", 0, -2)
+        f.line:SetHeight(18)
+        f.line:SetShown(i < #chain)
+        f.title:SetWidth(width - 140)
+        f.sub:SetWidth(width - 140)
+        f.title:SetText(("%d. %s"):format(i, st.title))
+        local c = st.id == targetID and C.gold or st.done and { .62, .78, .66 } or (isNext or st.active) and C.text or C.muted
+        f.title:SetTextColor(c[1], c[2], c[3])
+        f.sub:SetText((st.giver or "?") .. (st.zone and (", " .. st.zone) or ""))
+        local badge, bc = "", C.muted
+        if st.done then badge, bc = L("done"), C.green
+        elseif st.active then badge, bc = L("in quest log"), C.gold
+        elseif isNext then badge, bc = L("next"), C.gold end
+        if st.id == targetID and not st.done then badge = (badge ~= "" and (badge .. " · ") or "") .. L("reward") end
+        f.badge:SetText(badge)
+        f.badge:SetTextColor(bc[1], bc[2], bc[3])
+        f:Show()
+        detailY = detailY + 42
+    end
+end
+
 local function resetDetail()
     for _, t in ipairs(U.lines) do t:Hide() end
     U.lines.used = {}
@@ -495,6 +612,7 @@ local function resetDetail()
     U.action:Hide()
     U.action2:Hide()
     hideBars()
+    hideSteps()
     U.detailLink = nil
     detailY = 0
 end
@@ -520,7 +638,10 @@ local function sourceLine(entry)
         if GP.settings.questSort == "zone" and row.zone then distance = " · " .. row.zone end
         return ("%s · %s%s"):format(kind, (L("Level %d")):format(entry.level), distance)
     end
-    if entry.source == "Vendors" then return L("Vendor: ") .. (row.name or "?") end
+    if entry.source == "Vendors" then
+        local price = entry.item and entry.item.sellPrice and entry.item.sellPrice > 0 and (" · ~" .. money(entry.item.sellPrice * 4)) or ""
+        return L("Vendor: ") .. (row.name or "?") .. price
+    end
     if entry.source == "Auction" then return L("Auction house") .. " · " .. money(row.price) end
     if entry.source == "Crafted" then
         return L(professionNames[row.profession] or row.profession) .. (row.learn and (" " .. row.learn) or "")
@@ -574,7 +695,7 @@ local function showItemHead(item, sub)
 end
 local function percentText(gain, base)
     if not base or base <= 0 then return "" end
-    return "  |cff9dabb8" .. signed(gain / base * 100) .. " %|r"
+    return "  |cff85d6a0" .. signed(gain / base * 100) .. " %|r"
 end
 
 local function questBlock(row)
@@ -591,15 +712,7 @@ local function questBlock(row)
     local chain = GP.Route.Chain(row.sourceID)
     actions({ L("Waypoint to quest giver"), function() GP.Route.ToGiver(row.sourceID) end },
         #chain > 1 and { (L("Whole chain (%d)")):format(#chain), function() GP.Route.ToChain(row.sourceID) end } or nil)
-    if #chain > 1 then
-        section(L("Quest chain"))
-        for i, step in ipairs(chain) do
-            local mark = step.done and "|cff85d6a0✓|r" or step.active and "|cffe0b050▶|r" or "|cff9dabb8•|r"
-            local where = (step.giver or "?") .. (step.zone and (", " .. step.zone) or "")
-            detailLine("GameFontHighlightSmall", ("%s %d. %s"):format(mark, i, step.title), step.id == row.sourceID and C.gold or C.text, 4)
-            detailLine("GameFontDisableSmall", where, C.muted, 22)
-        end
-    end
+    if #chain > 1 then chainSteps(chain, row.sourceID) end
 end
 
 local function vendorBlock(row, item)
@@ -653,7 +766,7 @@ local function showUpgrade(result, profile)
         third = { label = L("Required level"), value = tostring(item.minLevel or "?") }
     end
     S.Metrics(U.detail, {
-        { label = L("Score gain"), value = signed(result.gain) .. percentText(result.gain, result.score - result.gain),
+        { label = L("Score gain") .. percentText(result.gain, result.score - result.gain), value = signed(result.gain),
             color = C.green, emphasis = true },
         { label = L("Replaces"), value = replaced, color = C.text },
         third,
@@ -717,6 +830,54 @@ local function showGear(data, profile)
     if not any then detailLine("GameFontDisableSmall", L("No readable values."), C.muted) end
 end
 
+local function combined(set)
+    local stats = {}
+    for _, item in ipairs({ set.main or false, set.off or false }) do
+        if item and item.stats then
+            for key, value in pairs(item.stats) do stats[key] = (stats[key] or 0) + value end
+        end
+    end
+    return { stats = stats }
+end
+local function showWeapons(data, profile)
+    local set, sets = data.set, data.sets
+    local titles = { current = L("Worn now"), twoHand = L("Best two-hand"), pair = L("Best main + off hand") }
+    showHead(set.main and set.main.icon or "Interface\\PaperDoll\\UI-PaperDoll-Slot-MainHand", titles[data.setKind],
+        L("Two-hand weapon against main hand and off hand, with the values of your profile"))
+    local width = (U.detail:GetWidth() or 300) - 24
+    local other = data.setKind == "twoHand" and sets.pair or data.setKind == "pair" and sets.twoHand or nil
+    S.Metrics(U.detail, {
+        { label = L("Score"), value = number(set.score), color = C.gold, emphasis = true },
+        { label = L("Against worn now"), value = signed(set.score - sets.current.score),
+            color = set.score >= sets.current.score and C.green or C.red },
+        { label = data.setKind == "twoHand" and L("Against best pair") or data.setKind == "pair" and L("Against best two-hand") or L("Best setup"),
+            value = other and signed(set.score - other.score) or (function()
+                local best = sets.current
+                for _, candidate in ipairs({ sets.twoHand, sets.pair }) do if candidate and candidate.score > best.score then best = candidate end end
+                return best == sets.current and L("worn") or best == sets.twoHand and L("two-hand") or L("pair")
+            end)(), color = C.text },
+    }, 12, detailY, width)
+    detailY = detailY + 60
+    section(L("Weapons"))
+    for _, part in ipairs({ { set.main, set.mainEntry, L("Main hand") }, { set.off, set.offEntry, L("Off hand") } }) do
+        local item, entry, label = part[1], part[2], part[3]
+        if item then
+            local where = entry and entry.source and entry.source ~= "Worn" and entry.row and sourceLine(entry)
+                or entry and entry.source == "Bags" and L("In your bags") or L("worn")
+            detailLine("GameFontHighlightSmall", ("|T%s:16|t %s%s|r"):format(item.icon or "", S.QualityColor(item.quality), item.name or "?"), C.text, 4)
+            detailLine("GameFontDisableSmall", label .. " · " .. where .. " · " .. number(P.SlotScore(item, profile, part[3] == L("Off hand") and 17 or 16) or 0)
+                .. " " .. L("points"), C.muted, 26)
+        elseif label == L("Off hand") and data.setKind ~= "twoHand" then
+            detailLine("GameFontDisableSmall", label .. ": " .. L("Empty slot"), C.muted, 4)
+        end
+    end
+    detailLine("GameFontDisableSmall", L("An off-hand weapon deals half damage: its weapon DPS counts half. Dual wield from level 20 (rogues 10); shields and held items by class."), C.muted)
+    if data.setKind ~= "current" then
+        section(L("Values compared"))
+        statLines(P.Diff(combined(set), combined(sets.current)), profile)
+    end
+end
+
 local function showZone(zone)
     showHead("Interface\\Icons\\INV_Misc_Map_01", zone.zone, (L("%d quest upgrades"):format(#zone.results)))
     local width = (U.detail:GetWidth() or 300) - 24
@@ -749,7 +910,7 @@ local function showDungeon(dungeon)
         (L("Level %d–%d"):format(dungeon.low, dungeon.high)))
     local width = (U.detail:GetWidth() or 300) - 24
     S.Metrics(U.detail, {
-        { label = L("Expected per run"), value = "≈ " .. signed(dungeon.expected), color = C.green, emphasis = true },
+        { label = L("Expected per run"), value = "~ " .. signed(dungeon.expected), color = C.green, emphasis = true },
         { label = L("Upgrades"), value = tostring(#dungeon.results), color = C.text },
         { label = L("Dungeon quests"), value = tostring(#dungeon.quests), color = C.text },
     }, 12, detailY, width)
@@ -830,7 +991,7 @@ end
 
 local function renderSettings()
     local s = GP.settings
-    local width = W - 36 - 32 - 16
+    local width = frame:GetWidth() - 36 - 32 - 16
     local y, n = 16, 0
     local function text(font, value, c, xx)
         n = n + 1
@@ -852,7 +1013,7 @@ local function renderSettings()
     local function stepper(key, label, field, xx)
         n = n + 1
         pageText(n, "GameFontHighlightSmall", xx, y + 6, 120, label)
-        local minus = control(key .. "-", 26, "−", function() s[field] = math.max(0, s[field] - 1); GP.Render() end)
+        local minus = control(key .. "-", 26, "-", function() s[field] = math.max(0, s[field] - 1); GP.Render() end)
         minus:ClearAllPoints()
         minus:SetPoint("TOPLEFT", U.pageContent, "TOPLEFT", xx + 124, -y)
         n = n + 1
@@ -917,6 +1078,10 @@ local function renderSettings()
     text("GameFontNormal", L("Need and greed"), C.gold)
     text("GameFontHighlightSmall", L("A chat line for every roll: upgrade for you, how much, or not usable."))
     toggle("roll", "rollHelp")
+    text("GameFontNormal", L("Minimap button"), C.gold)
+    text("GameFontHighlightSmall", L("Left click opens GearPilot, right click the settings. Drag it around the minimap. GearPilot is also in the addon list button of the minimap."))
+    toggle("minimap", "minimap")
+    if GP.UpdateMinimapButton then GP.UpdateMinimapButton() end
 
     text("GameFontNormal", L("Addons"), C.gold)
     local build = GP.Sources.BuildDate()
@@ -928,7 +1093,7 @@ local function renderSettings()
 end
 
 local function renderHelp()
-    local width = W - 36 - 32 - 16
+    local width = frame:GetWidth() - 36 - 32 - 16
     local y, n = 16, 0
     local function text(font, value, c)
         n = n + 1
@@ -942,6 +1107,7 @@ local function renderHelp()
     text("GameFontNormal", L("Views"), C.gold)
     text("GameFontHighlightSmall", L("Quests by zone: where questing pays most, with waypoints to every quest giver. Dungeons per dungeon: the expected gain of one run (score gain times drop chance) plus the dungeon quests."))
     text("GameFontHighlightSmall", L("Buy & craft: vendor gear, the auction house (Auctionator prices) and recipes from CraftPilot. Bags: upgrades, and gear that can go."))
+    text("GameFontHighlightSmall", L("Equipped gear, weapon setup: your best two-hand weapon against your best main hand and off hand, from what you wear and carry or from every source in your level range."))
     text("GameFontNormal", L("Limits"), C.gold)
     text("GameFontHighlightSmall", L("Weights are provisional. Random proc effects and set bonuses are not scored. Items the game has not loaded yet appear a moment later."))
     text("GameFontNormal", L("Commands"), C.gold)
@@ -963,7 +1129,31 @@ local titles = {
 
 -- What the list of a page shows: kind and data.
 local function pageData(page, s, low, high, equipped, profile, player)
-    if page == "gear" then return gearRows(equipped, profile), false, {}, "gear" end
+    if page == "gear" then
+        if (s.views.gear or "worn") ~= "weapons" then return gearRows(equipped, profile), false, {}, "gear" end
+        -- Weapon setups: worn weapons and bags, optionally every source in the level range.
+        local sources = { "Bags" }
+        if s.weaponPool == "all" then
+            sources = { "Bags", "Quests", "Dungeons" }
+            for _, key in ipairs({ "Vendors", "Auction", "Crafted" }) do
+                if s.include[key] then sources[#sources + 1] = key end
+            end
+        end
+        local entries, loading, states = collect(sources, low, high)
+        local pool = {}
+        for slot = 16, 17 do
+            if equipped[slot] and equipped[slot].stats then
+                pool[#pool + 1] = { item = equipped[slot], key = "worn" .. slot, entry = { source = "Worn" } }
+            end
+        end
+        for _, entry in ipairs(entries) do pool[#pool + 1] = { item = entry.item, key = entry.key, entry = entry } end
+        local maxLevel = s.weaponPool == "all" and high or player.level
+        local sets = P.WeaponSets(pool, equipped, profile, player.class, player.level, maxLevel)
+        local list = { { key = "set:current", setKind = "current", set = sets.current, sets = sets } }
+        if sets.twoHand then list[#list + 1] = { key = "set:2h", setKind = "twoHand", set = sets.twoHand, sets = sets } end
+        if sets.pair then list[#list + 1] = { key = "set:pair", setKind = "pair", set = sets.pair, sets = sets } end
+        return list, loading, states, "weapons"
+    end
     if page == "upgrades" then
         local sources = { "Bags", "Quests", "Dungeons" }
         for _, key in ipairs({ "Vendors", "Auction", "Crafted" }) do
@@ -1005,7 +1195,30 @@ local function pageData(page, s, low, high, equipped, profile, player)
     end
     if page == "shop" then
         local sources = s.shopSource == "all" and { "Vendors", "Auction", "Crafted" } or { s.shopSource }
-        local list, loading, states = recommend(sources, low, high, equipped, profile, player)
+        local all, loading, states = recommend(sources, low, high, equipped, profile, player)
+        -- Price: auction = Auctionator price, vendor = estimate from the vendor sell price, crafted = unknown.
+        local list, cap = {}, s.shopMax or 0
+        for _, result in ipairs(all) do
+            local entry = result.entry
+            local price = entry.source == "Auction" and entry.row.price
+                or entry.source == "Vendors" and result.item.sellPrice and result.item.sellPrice > 0 and result.item.sellPrice * 4 or nil
+            result.price = price
+            if cap == 0 or (price and price <= cap) then list[#list + 1] = result end
+        end
+        if s.shopSort == "price" then
+            table.sort(list, function(a, b)
+                local pa, pb = a.price or math.huge, b.price or math.huge
+                if pa ~= pb then return pa < pb end
+                return a.gain > b.gain
+            end)
+        elseif s.shopSort == "value" then
+            local function value(r) return r.price and r.price > 0 and r.gain / (r.price / 10000) or -1 end
+            table.sort(list, function(a, b)
+                local va, vb = value(a), value(b)
+                if va ~= vb then return va > vb end
+                return a.gain > b.gain
+            end)
+        end
         return list, loading, states, "upgrade"
     end
     -- bags
@@ -1045,6 +1258,24 @@ local function fillRow(r, kind, data, width, list)
         r.sub:SetText(L(P.slotNames[data.slot] or ""))
         r.value:SetText(data.score and number(data.score) or "")
         color(r.value, C.gold)
+    elseif kind == "weapons" then
+        local set = data.set
+        r.link = set.main and set.main.link
+        r.icon:SetTexture(set.main and set.main.icon or "Interface\\PaperDoll\\UI-PaperDoll-Slot-MainHand")
+        local names = { current = L("Worn now"), twoHand = L("Best two-hand"), pair = L("Best main + off hand") }
+        r.name:SetText(names[data.setKind])
+        local parts = {}
+        if set.main then parts[#parts + 1] = set.main.name end
+        if set.off then parts[#parts + 1] = set.off.name end
+        r.sub:SetText(#parts > 0 and table.concat(parts, " + ") or L("Empty slot"))
+        if data.setKind == "current" then
+            r.value:SetText(number(set.score))
+            color(r.value, C.gold)
+        else
+            local diff = set.score - data.sets.current.score
+            r.value:SetText(signed(diff))
+            color(r.value, diff > 0 and C.green or diff < 0 and C.red or C.muted)
+        end
     elseif kind == "zone" then
         r.icon:SetTexture("Interface\\Icons\\INV_Misc_Map_01")
         r.name:SetText(data.zone)
@@ -1056,7 +1287,7 @@ local function fillRow(r, kind, data, width, list)
         r.name:SetText(GP.Sources.DungeonName(data.row))
         r.sub:SetText((L("Level %d–%d"):format(data.low, data.high)) .. " · " .. (L("%d upgrades"):format(#data.results))
             .. (#data.quests > 0 and (" · " .. (L("%d quests"):format(#data.quests))) or ""))
-        r.value:SetText("≈ " .. signed(data.expected))
+        r.value:SetText("~ " .. signed(data.expected))
         color(r.value, C.green)
     elseif kind == "clutter" then
         r.icon:SetTexture(item.icon)
@@ -1106,11 +1337,14 @@ function GP.Render()
     for _, c in pairs(U.controls) do c:Hide() end
     for _, t in ipairs(pageLines) do t:Hide() end
     local rows = barRows(page)
-    local top = TOP + rows * 34 + (rows > 0 and 4 or 0)
+    local top = TOP + (rows > 0 and (rows * 34 + 20) or 0)
+    local listW = listWidth()
     U.listPanel:ClearAllPoints()
     U.listPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -top)
     U.listPanel:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, BOTTOM)
-    U.listPanel:SetWidth(LIST)
+    U.listPanel:SetWidth(listW)
+    U.pageContent:SetWidth(frame:GetWidth() - 36 - 32)
+    U.footer:SetWidth(frame:GetWidth() - 36)
     if page == "settings" or page == "help" then
         U.listPanel:Hide()
         U.detailPanel:Hide()
@@ -1128,8 +1362,7 @@ function GP.Render()
     local selectKey = page .. kind
 
     -- List
-    local width = (U.listScroll:GetWidth() or (LIST - 32))
-    if width <= 0 then width = LIST - 32 end
+    local width = listW - 32
     U.listContent:SetWidth(width)
     local selected = GP.selected[selectKey]
     local found
@@ -1154,6 +1387,7 @@ function GP.Render()
         r:Show()
     end
     U.listContent:SetHeight(math.max(10, #list * 46))
+    U.empty:SetWidth(listW - 28)
     if #list == 0 then
         U.empty:SetText(emptyMessage(page, kind, loading, states))
         U.empty:Show()
@@ -1165,7 +1399,7 @@ function GP.Render()
     end
 
     -- Detail
-    U.detail:SetWidth(math.max(200, (U.detailScroll:GetWidth() or (W - LIST - 82))))
+    U.detail:SetWidth(math.max(200, frame:GetWidth() - 36 - listW - 10 - 32))
     resetDetail()
     if not found then
         U.detailIcon:SetTexture(nil)
@@ -1175,6 +1409,8 @@ function GP.Render()
         detailLine("GameFontDisableSmall", loading and L("Loading item data …") or L("Select an item for details."), C.muted)
     elseif kind == "gear" then
         showGear(found, profile)
+    elseif kind == "weapons" then
+        showWeapons(found, profile)
     elseif kind == "zone" then
         showZone(found)
     elseif kind == "dungeon" then
@@ -1197,7 +1433,9 @@ function GP.ScheduleRefresh()
     end)
 end
 
+local restored = false
 function GP.Open(page)
+    if not restored then restored = true; GP.RestoreWindow() end
     if page then GP.settings.page = page end
     U.profileMenu:Hide()
     frame:Show()
@@ -1209,3 +1447,12 @@ function GP.Toggle()
 end
 
 frame:SetScript("OnHide", function() U.profileMenu:Hide() end)
+frame:SetScript("OnSizeChanged", function() if GP.ScheduleRefresh then GP.ScheduleRefresh() end end)
+-- Saved position and size.
+function GP.RestoreWindow()
+    local saved = GP.settings and GP.settings.window
+    if type(saved) ~= "table" or not saved.point then return end
+    frame:ClearAllPoints()
+    frame:SetPoint(saved.point, UIParent, saved.relative or saved.point, saved.x or 0, saved.y or 0)
+    if saved.w and saved.h then frame:SetSize(math.max(W, saved.w), math.max(H, saved.h)) end
+end

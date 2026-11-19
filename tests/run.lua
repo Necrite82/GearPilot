@@ -101,7 +101,7 @@ assert(#heal == 1 and math.abs(heal[1].gain - (20 + 4 * 1.5 - 10 * 0.5)) < 1e-6)
 -- Dual wield: a rogue can put a one-hand weapon into the off hand.
 local rogue = P.Recommend({ row("dagger", "Bags", nil, item(50, { DPS = 10 }, 15, "INVTYPE_WEAPON", 2, 15)) },
     { [16] = item(51, { DPS = 12 }, 10, "INVTYPE_WEAPON", 2, 15), [17] = item(52, { DPS = 5 }, 10, "INVTYPE_WEAPON", 2, 15) }, opts)
-assert(#rogue == 1 and rogue[1].slot == 17)
+assert(#rogue == 1 and rogue[1].slot == 17 and rogue[1].gain == (10 - 5) * 4 * 0.5, "off-hand weapon DPS counts half")
 
 -- Rings: no duplicate unique ring, second ring slot used.
 local rings = { [11] = item(60, { AGI = 9 }, 10, "INVTYPE_FINGER", 4, 0), [12] = item(61, { AGI = 3 }, 10, "INVTYPE_FINGER", 4, 0) }
@@ -219,5 +219,21 @@ for _, c in ipairs(clutter) do reasons[c.key] = c.reason end
 assert(reasons.a == "worse" and not reasons.b and reasons.c == "unusable" and not reasons.d, "reserved items stay")
 local skills, anySkill = GP.Skills.Parse({ { "Schwerter", 45, 110 }, { "Defense", 100, 110 }, { "Bows", 80, 110 } })
 assert(anySkill and skills[7].rank == 45 and skills[2].rank == 80 and not skills[4])
+
+-- Weapon setups: two-hand against two one-hand weapons
+local fury = P.Profile("melee-str")
+local w2h = item(100, { DPS = 30, STR = 10 }, 30, "INVTYPE_2HWEAPON", 2, 8)
+local w1a = item(101, { DPS = 20, STR = 5 }, 30, "INVTYPE_WEAPON", 2, 7)
+local w1b = item(102, { DPS = 18, STR = 6 }, 30, "INVTYPE_WEAPON", 2, 0)
+local sets = P.WeaponSets({ { item = w2h, key = "a" }, { item = w1a, key = "b" }, { item = w1b, key = "c" } },
+    { [16] = w2h }, fury, "WARRIOR", 30)
+assert(sets.twoHand.main == w2h and math.abs(sets.twoHand.score - (30 * 4 + 10)) < 1e-9)
+assert(sets.pair.main == w1a and sets.pair.off == w1b, "warrior dual wields from 20")
+assert(math.abs(sets.pair.score - ((20 * 4 + 5) + (18 * 4 * 0.5 + 6))) < 1e-9)
+assert(math.abs(sets.current.score - (30 * 4 + 10)) < 1e-9)
+local palaSets = P.WeaponSets({ { item = w1a, key = "b" }, { item = w1b, key = "c" },
+    { item = item(103, { STA = 10 }, 30, "INVTYPE_SHIELD", 4, 6), key = "d" } }, {}, fury, "PALADIN", 30)
+assert(palaSets.pair.off and palaSets.pair.off.equip == "INVTYPE_SHIELD", "paladin: shield, no second weapon")
+assert(P.SpecProfile("HUNTER", 3) == "melee-agi", "survival hunters fight in melee")
 
 print("GearPilot checks passed")

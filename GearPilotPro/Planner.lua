@@ -50,7 +50,7 @@ end
 -- Specialization -> profile (Forever has three per class; a fourth for druids is the healer).
 Planner.specProfiles = {
     WARRIOR = { "melee-str", "melee-str", "tank" }, PALADIN = { "healer", "tank", "melee-str" },
-    HUNTER = { "ranged", "ranged", "ranged" }, ROGUE = { "melee-agi", "melee-agi", "melee-agi" },
+    HUNTER = { "ranged", "ranged", "melee-agi" }, ROGUE = { "melee-agi", "melee-agi", "melee-agi" },
     PRIEST = { "healer", "healer", "caster" }, SHAMAN = { "caster", "melee-str", "healer" },
     MAGE = { "caster", "caster", "caster" }, WARLOCK = { "caster", "caster", "caster" },
     DRUID = { "caster", "melee-agi", "healer", "healer" },
@@ -192,15 +192,25 @@ end
 
 -- What the new item would replace in a slot and the score of that. A two-hand weapon replaces main and off hand;
 -- with a two-hand weapon worn, a one-hand weapon competes against it alone and leaves the off hand empty.
+-- Score in a slot: an off-hand weapon deals half damage, so its weapon DPS counts half.
+Planner.OFFHAND_DPS = 0.5
+function Planner.SlotScore(item, profile, slot)
+    local score = Planner.Score(item, profile)
+    if score and slot == 17 and item and item.classID == 2 and item.stats and item.stats.DPS then
+        score = score - (1 - Planner.OFFHAND_DPS) * item.stats.DPS * (profile.DPS or 0)
+    end
+    return score
+end
+
 local function baseline(slot, item, equipped, profile)
     local current = equipped[slot]
     if item.equip == "INVTYPE_2HWEAPON" then
-        local main, off = Planner.Score(equipped[16], profile), Planner.Score(equipped[17], profile)
+        local main, off = Planner.SlotScore(equipped[16], profile, 16), Planner.SlotScore(equipped[17], profile, 17)
         if not main or not off then return nil end
         return main + off, equipped[16], equipped[17]
     end
     if slot == 17 and equipped[16] and equipped[16].equip == "INVTYPE_2HWEAPON" then return nil end
-    local base = Planner.Score(current, profile)
+    local base = Planner.SlotScore(current, profile, slot)
     return base, current
 end
 
@@ -231,9 +241,10 @@ function Planner.Recommend(candidates, equipped, options)
                 for _, slot in ipairs(slots) do
                     local base, current, second = baseline(slot, item, equipped, options.profile)
                     local worn = current and current.link and current.link == item.link
-                    if base and not worn and score > base and (not best or score - base > best.gain) then
+                    local inSlot = Planner.SlotScore(item, options.profile, slot)
+                    if base and not worn and inSlot > base and (not best or inSlot - base > best.gain) then
                         best = { entry = entry, item = item, slot = slot, current = current, second = second,
-                            gain = score - base, score = score }
+                            gain = inSlot - base, score = inSlot }
                     end
                 end
             end
@@ -271,9 +282,9 @@ function Planner.Compare(item, equipped, profile, class, level)
     if not slots or not item.stats then return nil end
     if not Planner.CanUse(item, class, math.max(level, item.minLevel or 0)) then return { usable = false } end
     if item.equip == "INVTYPE_WEAPON" and dualWield(class, level) then slots = {16, 17} end
-    local score = Planner.Score(item, profile)
     local best
     for _, slot in ipairs(slots) do
+        local score = Planner.SlotScore(item, profile, slot)
         local base, current = baseline(slot, item, equipped, profile)
         if current and current.link and current.link == item.link then
             return { usable = true, worn = true, slot = slot, score = score }
@@ -284,6 +295,53 @@ function Planner.Compare(item, equipped, profile, class, level)
     end
     if best and best.base > 0 then best.percent = best.gain / best.base * 100 end
     return best
+end
+
+-- Weapon setups: the best two-hand weapon against the best main hand + off hand (second weapon for dual
+-- wielders, shield or held item otherwise) from a pool of { item, entry } (worn, bags and sources).
+-- Returns { current = set, twoHand = set or nil, pair = set or nil }; a set is { main, off, mainEntry, offEntry, score }.
+local mainTypes = { INVTYPE_WEAPON = true, INVTYPE_WEAPONMAINHAND = true }
+local offWeapons = { INVTYPE_WEAPON = true, INVTYPE_WEAPONOFFHAND = true }
+local offOther = { INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true }
+function Planner.WeaponSets(pool, equipped, profile, class, level, maxLevel)
+    local function usable(item)
+        return item and item.stats and Planner.CanUse(item, class, math.max(level, item.minLevel or 0))
+            and (item.minLevel or 0) <= (maxLevel or level)
+    end
+    local currentScore = (Planner.SlotScore(equipped[16], profile, 16) or 0) + (Planner.SlotScore(equipped[17], profile, 17) or 0)
+    local result = { current = { main = equipped[16], off = equipped[17], score = currentScore } }
+    local mains, offs = {}, {}
+    local dual = dualWield(class, level)
+    for _, candidate in ipairs(pool) do
+        local item = candidate.item
+        if usable(item) then
+            if item.equip == "INVTYPE_2HWEAPON" then
+                local score = Planner.SlotScore(item, profile, 16)
+                if not result.twoHand or score > result.twoHand.score then
+                    result.twoHand = { main = item, mainEntry = candidate.entry, score = score }
+                end
+            end
+            if mainTypes[item.equip] then mains[#mains + 1] = candidate end
+            if offOther[item.equip] or (dual and offWeapons[item.equip]) then offs[#offs + 1] = candidate end
+        end
+    end
+    for _, m in ipairs(mains) do
+        local mainScore = Planner.SlotScore(m.item, profile, 16)
+        -- Without an off hand the main hand alone still counts.
+        if not result.pair or mainScore > result.pair.score then
+            result.pair = { main = m.item, mainEntry = m.entry, score = mainScore }
+        end
+        for _, o in ipairs(offs) do
+            local same = o.item == m.item or (o.key and o.key == m.key)
+            if not same then
+                local score = mainScore + Planner.SlotScore(o.item, profile, 17)
+                if score > result.pair.score then
+                    result.pair = { main = m.item, off = o.item, mainEntry = m.entry, offEntry = o.entry, score = score }
+                end
+            end
+        end
+    end
+    return result
 end
 
 -- Quest upgrades by zone: one entry per zone with the summed gain, best first.
