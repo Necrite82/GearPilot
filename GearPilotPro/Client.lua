@@ -115,7 +115,7 @@ local function bounded(value, fallback, lower, upper)
     return math.max(lower, math.min(upper, math.floor(value)))
 end
 local chances = { [0.01] = true, [0.02] = true, [0.05] = true, [0.1] = true }
-local pages = { upgrades = true, quests = true, dungeons = true, shop = true, auction = true, bags = true, gear = true, settings = true, help = true }
+local pages = { upgrades = true, quests = true, dungeons = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
 local function initialize()
     local player = GP.Player()
     local saved = type(GearPilotProSettings) == "table" and GearPilotProSettings or {}
@@ -143,6 +143,9 @@ local function initialize()
     saved.ahMax = tonumber(saved.ahMax) or 0
     saved.ahAge = (saved.ahAge == "today" or saved.ahAge == "week") and saved.ahAge or "all"
     saved.chains = saved.chains == "started" and "started" or "all"
+    saved.wishlist = type(saved.wishlist) == "table" and saved.wishlist or {}
+    if saved.wishAlerts == nil then saved.wishAlerts = true end
+    saved.bisTarget = (saved.bisTarget == "preraid" or saved.bisTarget == "raid") and saved.bisTarget or "now"
     if saved.minimap == nil then saved.minimap = true end
     if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"

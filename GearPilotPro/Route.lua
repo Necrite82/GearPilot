@@ -139,6 +139,18 @@ function Route.ToNPC(ref, title)
     end
 end
 
+-- Waypoint to any spot (a dungeon entrance).
+function Route.ToSpot(spot, title, where)
+    Route.queue = nil
+    local uiMap, x, y = S.MapPoint(spot)
+    local step = { title = title, giver = where, uiMap = uiMap, x = x, y = y, zone = S.MapName(uiMap) }
+    if place(step) then
+        say(L("Waypoint: ") .. describe(step))
+    else
+        say(L("No position known for this quest giver."))
+    end
+end
+
 -- Game waypoint: next open step of the queue.
 function Route.Next(announce)
     local queue = Route.queue

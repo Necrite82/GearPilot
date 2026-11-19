@@ -16,6 +16,11 @@ Sources.instances = {
     [469] = {"Blackwing Lair", true}, [509] = {"Ruins of Ahn'Qiraj", true}, [531] = {"Temple of Ahn'Qiraj", true},
     [533] = {"Naxxramas", true},
 }
+-- Raid names, so quests that play in a raid (tier tokens) count as raid sources.
+Sources.raidNames = {}
+for _, instance in pairs(Sources.instances) do
+    if instance[2] then Sources.raidNames[instance[1]] = true end
+end
 -- Not dungeons: PvP halls and the tram.
 local notDungeons = { [2257] = true, [2917] = true, [2918] = true }
 
@@ -157,6 +162,7 @@ function Sources.Build(db, options)
                         choiceGroup = choice and ("q" .. questID) or nil, giver = npcName(db, giver),
                         giverRef = giver, zone = zone and zone[1] or (dungeon and dungeon[1]) or nil,
                         dungeonQuest = dungeon and dungeon[1] or nil,
+                        raidQuest = dungeon and Sources.raidNames[dungeon[1]] or nil,
                         exclusive = type(detail[5]) == "table" and detail[5] or nil,
                     }
                 end
@@ -238,6 +244,102 @@ function Sources.EquipIndex(db, class)
         end
     end
     return index
+end
+
+-- Every source of one item, for the wishlist: quests, dungeon and world drops, vendors, world drop level and
+-- (with CraftPilot's catalog) recipes. Pure Lua; options = { faction, raceBit, class, catalog }.
+function Sources.ItemSources(db, itemID, options)
+    options = options or {}
+    local list = {}
+    local item = db.item and db.item[itemID]
+    for _, questID in ipairs(db.rew and db.rew[itemID] or {}) do
+        local quest = db.quest and db.quest[questID]
+        local detail = db.qx and db.qx[questID] or {}
+        if quest and Sources.RaceAllowed(detail[1], options.raceBit, options.faction)
+            and Sources.ClassAllowed(detail[2], options.class) then
+            local superseded = false
+            for _, other in ipairs(db.rew[itemID]) do
+                if replaced(db, questID, other) then superseded = true end
+            end
+            if not superseded then
+                local giver = db.qg and db.qg[questID] and db.qg[questID][1]
+                local zoneID = type(detail[11]) == "number" and detail[11] > 0 and detail[11] or nil
+                local zone = zoneID and db.area and db.area[zoneID]
+                local dungeon = zoneID and db.dng and db.dng[zoneID]
+                list[#list + 1] = { kind = "quest", questID = questID, name = quest[1], level = quest[2], giverRef = giver,
+                    giver = npcName(db, giver), zone = zone and zone[1] or (dungeon and dungeon[1]) or nil,
+                    dungeonQuest = dungeon and dungeon[1] or nil }
+            end
+        end
+    end
+    -- Drops: dungeons grouped (best chance per dungeon), open world mobs individually.
+    local dungeons = {}
+    local drops = db.drop and db.drop[itemID] or {}
+    for i = 1, #drops, 2 do
+        local npcID, chance = drops[i], drops[i + 1] or 0
+        local npc = db.npc and db.npc[npcID]
+        local key, name, raid, forever, mapID = dungeonOf(db, npcID)
+        if key then
+            local entry = dungeons[key]
+            if not entry or chance > entry.rawChance then
+                local new = { kind = "dungeon", key = key, name = name, raid = raid, forever = forever, mapID = mapID,
+                    boss = npc and npc[1], level = npc and (npc[4] or npc[3]), rawChance = chance,
+                    chance = chance > 0 and chance / 10000 or nil }
+                if entry then
+                    for k, v in pairs(new) do entry[k] = v end
+                else
+                    dungeons[key] = new
+                    list[#list + 1] = new
+                end
+            end
+        elseif npc then
+            list[#list + 1] = { kind = "mob", npcRef = "c" .. npcID, name = npc[1], level = npc[4] or npc[3],
+                rank = npc[5], rawChance = chance, chance = chance > 0 and chance / 10000 or nil }
+        end
+    end
+    for _, npcID in ipairs(db.vend and db.vend[itemID] or {}) do
+        local side = db.nfac and db.nfac[npcID]
+        local friendly = not side or not options.faction or side == "AH"
+            or (options.faction == "Alliance" and side == "A") or (options.faction == "Horde" and side == "H")
+        local npc = db.npc and db.npc[npcID]
+        if friendly and npc then list[#list + 1] = { kind = "vendor", npcRef = "c" .. npcID, name = npc[1] } end
+    end
+    local world = db.world and db.world[itemID]
+    if world then list[#list + 1] = { kind = "world", level = world } end
+    for profession, data in pairs(options.catalog or {}) do
+        for recipeID, recipe in pairs(type(data) == "table" and data.recipes or {}) do
+            if recipe.makes == itemID then
+                list[#list + 1] = { kind = "craft", profession = profession, recipeID = recipeID, name = recipe.name,
+                    learn = recipe.learn }
+            end
+        end
+    end
+    -- Most useful first: quests, dungeons (by chance), vendors, crafting, mobs (by chance), world drop.
+    local order = { quest = 1, dungeon = 2, vendor = 3, craft = 4, mob = 5, world = 6 }
+    table.sort(list, function(a, b)
+        if order[a.kind] ~= order[b.kind] then return order[a.kind] < order[b.kind] end
+        return (a.rawChance or 0) > (b.rawChance or 0)
+    end)
+    -- Keep the list short: at most 5 open world mobs.
+    local mobs, kept = 0, {}
+    for _, source in ipairs(list) do
+        if source.kind ~= "mob" then kept[#kept + 1] = source
+        else
+            mobs = mobs + 1
+            if mobs <= 5 then kept[#kept + 1] = source end
+        end
+    end
+    return kept, item
+end
+
+-- Dungeon entrance on the map (uiMap, x, y in 0..1) by dungeon name, from ForeverDB's dng table.
+function Sources.Entrance(db, name)
+    for _, entry in pairs(db.dng or {}) do
+        if entry[1] == name and type(entry[3]) == "table" and entry[3][1] then
+            return { world = false, map = entry[3][1], x = entry[3][2] / 1000, y = entry[3][3] / 1000 }
+        end
+    end
+    return nil
 end
 
 -- Quest chain: every prerequisite (recursively), earliest first, ending with the quest itself.

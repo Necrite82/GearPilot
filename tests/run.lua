@@ -284,4 +284,48 @@ local twins = S.Twins({ quest = { [286] = { "Return the Statuette" }, [98189] = 
     [6] = { "Same name" }, [7] = { "Same name" } } })
 assert(twins[286][1] == 98189 and twins[98189][1] == 286 and not twins[6], "only Classic <-> Forever pairs")
 
+-- 0.7.0: best in slot, wishlist text, item sources
+local bisPool = {
+    { item = item(300, { AGI = 10 }, 30, "INVTYPE_CHEST", 4, 2), key = "a" },
+    { item = item(301, { AGI = 14 }, 30, "INVTYPE_CHEST", 4, 2), key = "b" },
+    { item = item(302, { AGI = 99 }, 45, "INVTYPE_CHEST", 4, 2), key = "too high" },
+    { item = item(303, { AGI = 6 }, 30, "INVTYPE_FINGER", 4, 0), key = "r1" },
+    { item = item(304, { AGI = 8 }, 30, "INVTYPE_FINGER", 4, 0), key = "r2" },
+    { item = item(305, { AGI = 4 }, 30, "INVTYPE_FINGER", 4, 0), key = "r3" },
+    { item = item(306, { DPS = 20 }, 30, "INVTYPE_WEAPON", 2, 15), key = "d1" },
+    { item = item(307, { DPS = 18 }, 30, "INVTYPE_WEAPON", 2, 15), key = "d2" },
+    { item = item(308, { AGI = 50 }, 30, "INVTYPE_CHEST", 4, 3), key = "mail" },
+}
+local bis = P.BestInSlot(bisPool, melee, "ROGUE", 30, 40)
+local bySlot = {}
+for _, b in ipairs(bis) do bySlot[b.slot] = b.item.id end
+assert(bySlot[5] == 301, "best usable chest within the level limit, no mail for a rogue")
+assert(bySlot[11] == 304 and bySlot[12] == 303, "two best different rings")
+assert(bySlot[16] == 306 and bySlot[17] == 307, "dual wield daggers")
+local text = P.ExportWishlist({ [303] = { goal = true }, [12] = {} })
+assert(text == "GP1:12,303!")
+local back = P.ImportWishlist("my list GP1:12, 303! ")
+assert(back[12] and not back[12].goal and back[303].goal and P.ImportWishlist("nope") == nil)
+local srcDb = {
+    item = { [500] = { "Cape", 2, 20, 25, 4, 1, 16 } }, quest = { [1] = { "Q", 20, 15 } }, qx = { [1] = { 77 } }, rew = { [500] = { 1 } },
+    npc = { [639] = { "Edwin VanCleef", "", 21, 21, 1 }, [100] = { "Wolf", "", 10, 11, 0 }, [7] = { "Vendor" } },
+    spw = { c639 = { { 36, 1, 2 } } }, drop = { [500] = { 639, 1500, 100, 30 } }, vend = { [500] = { 7 } }, nfac = { [7] = "A" },
+    world = { [500] = 18 }, dng = { [1581] = { "The Deadmines", 40, { 1436, 420, 720 } } },
+}
+local found = S.ItemSources(srcDb, 500, { faction = "Alliance", raceBit = 1, class = "MAGE",
+    catalog = { tailoring = { recipes = { [9] = { name = "Cape", makes = 500, learn = 120 } } } } })
+local kinds = {}
+for _, f in ipairs(found) do kinds[#kinds + 1] = f.kind end
+assert(table.concat(kinds, ",") == "quest,dungeon,vendor,craft,mob,world", table.concat(kinds, ","))
+assert(found[2].name == "The Deadmines" and found[2].chance == 0.15 and found[5].name == "Wolf")
+local door = S.Entrance(srcDb, "The Deadmines")
+assert(door and door.map == 1436 and math.abs(door.x - 0.42) < 1e-9)
+
+assert(S.raidNames["Naxxramas"] and S.raidNames["Molten Core"] and not S.raidNames["The Deadmines"])
+local raidDb = { item = { [600] = { "Tier Shoulders", 4, 60, 88, 4, 4, 3 } }, quest = { [9] = { "Tier quest", 60, 60 } },
+    qx = { [9] = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 3456 } }, rew = { [600] = { 9 } },
+    dng = { [3456] = { "Naxxramas" } } }
+local raidRows = S.Build(raidDb, { class = "WARRIOR", faction = "Alliance" })
+assert(raidRows[1] and raidRows[1].raidQuest, "a quest that plays in a raid is a raid source")
+
 print("GearPilot checks passed")

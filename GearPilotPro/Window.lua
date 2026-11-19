@@ -182,7 +182,7 @@ U.renderProfileMenu = renderProfileMenu
 local navIcons = {
     upgrades = "Interface\\Icons\\INV_Sword_04", quests = "Interface\\Icons\\INV_Misc_Note_01",
     dungeons = "Interface\\Icons\\INV_Misc_Head_Dragon_01", shop = "Interface\\Icons\\INV_Misc_Coin_02",
-    auction = "Interface\\Icons\\INV_Misc_Coin_04",
+    auction = "Interface\\Icons\\INV_Misc_Coin_04", wishlist = "Interface\\Icons\\INV_Misc_Note_06",
     bags = "Interface\\Icons\\INV_Misc_Bag_08", gear = "Interface\\Icons\\INV_Chest_Cloth_17",
     settings = "Interface\\Icons\\INV_Misc_Gear_01", help = "Interface\\Icons\\INV_Misc_QuestionMark",
 }
@@ -222,7 +222,7 @@ end
 local mainPages = {
     { key = "upgrades", label = L("Best upgrades") }, { key = "quests", label = L("Quests") },
     { key = "dungeons", label = L("Dungeons") }, { key = "shop", label = L("Buy & craft") },
-    { key = "auction", label = L("Auction house") },
+    { key = "auction", label = L("Auction house") }, { key = "wishlist", label = L("Wishlist") },
     { key = "bags", label = L("Bags") }, { key = "gear", label = L("Equipped gear") },
 }
 for i, page in ipairs(mainPages) do
@@ -325,6 +325,16 @@ local function pill(pages, label)
     U.bar.pills[#U.bar.pills + 1] = p
     return p
 end
+local function actionPill(pages, label, width, actions)
+    local p = pill(pages, label)
+    for i, action in ipairs(actions) do
+        local b = S.Button(p, width - 2, 24, L(action[1]), action[2])
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", p.captionWidth + (i - 1) * width, -3)
+        b.action = true
+    end
+    p:SetWidth(p.captionWidth + #actions * width + 4)
+    return p
+end
 local function segmentPill(pages, label, width, options, field, default)
     local p = pill(pages, label)
     for i, option in ipairs(options) do
@@ -370,6 +380,14 @@ maxPill:SetWidth(maxPill:GetWidth() + 74)
 segmentPill({ "bags" }, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", "Can go" } }, "views.bags", "upgrades")
 segmentPill({ "gear" }, "View", 110, { { "worn", "Equipped" }, { "weapons", "Weapon setup" } }, "views.gear", "worn")
 segmentPill({ "gear" }, "Weapons from", 110, { { "own", "Worn & bags" }, { "all", "All sources" } }, "weaponPool", "own")
+segmentPill({ "wishlist" }, "View", 130, { { "list", "My wishlist" }, { "bis", "BIS (calculated)" } }, "views.wishlist", "list")
+local bisTarget = segmentPill({ "wishlist" }, "BIS for", 110, { { "now", "Your range" }, { "preraid", "60 pre-raid" }, { "raid", "60 with raids" } }, "bisTarget", "now")
+bisTarget.when = function() return (GP.settings.views.wishlist or "list") == "bis" end
+local share = actionPill({ "wishlist" }, "Share", 90, { { "Export", function() GP.Wish.Dialog("export", P.ExportWishlist(GP.Wish.List())) end },
+    { "Import", function() GP.Wish.Dialog("import") end } })
+share.when = function() return (GP.settings.views.wishlist or "list") == "list" end
+local adopt = actionPill({ "wishlist" }, "List", 190, { { "Take over as goals", function() if GP.AdoptBis then GP.AdoptBis() end end } })
+adopt.when = function() return (GP.settings.views.wishlist or "list") == "bis" end
 
 -- Slot filter: a menu button with an arrow, so it reads as a choice list ("Filter: slot").
 local slotGroups = {
@@ -394,7 +412,7 @@ function GP.SlotAllowed(slot)
     end
     return false
 end
-local slotPill = pill({ "upgrades", "quests", "dungeons", "shop", "auction", "bags" }, "Filter: slot")
+local slotPill = pill({ "upgrades", "quests", "dungeons", "shop", "auction", "bags", "wishlist" }, "Filter: slot")
 U.slotButton = S.Button(slotPill, 150, 24, "", function() U.slotMenu:SetShown(not U.slotMenu:IsShown()) end)
 U.slotButton:SetPoint("TOPLEFT", slotPill, "TOPLEFT", slotPill.captionWidth, -3)
 U.slotArrow = U.slotButton:CreateTexture(nil, "OVERLAY")
@@ -423,7 +441,7 @@ local function barRows(page)
     local available = frame:GetWidth() - 36 - 20
     local x, rows = 10, 0
     for _, p in ipairs(U.bar.pills) do
-        local on = p.pages[page] == true
+        local on = p.pages[page] == true and (not p.when or p.when())
         p:SetShown(on)
         if on then
             local w = p:GetWidth()
@@ -581,6 +599,58 @@ local function itemLine(item, sub, right, rightColor)
     detailY = detailY + (sub and 36 or 30) + 4
     return f
 end
+
+-- Source rows (wishlist): icon for the kind, two lines, a button on the right (waypoint, entrance, CraftPilot).
+U.sourceLines = {}
+local SOURCE_ICONS = {
+    quest = "Interface\\GossipFrame\\AvailableQuestIcon", dungeon = "Interface\\Icons\\INV_Misc_Head_Dragon_01",
+    vendor = "Interface\\GossipFrame\\VendorGossipIcon", craft = "Interface\\Icons\\Trade_BlackSmithing",
+    mob = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", world = "Interface\\Icons\\INV_Misc_Bag_10",
+    auction = "Interface\\Icons\\INV_Misc_Coin_04",
+}
+local function sourceLine2(kind, title, sub, buttonText, callback)
+    U.sourceLines.used = (U.sourceLines.used or 0) + 1
+    local i = U.sourceLines.used
+    local f = U.sourceLines[i]
+    if not f then
+        f = CreateFrame("Frame", nil, U.detail, "BackdropTemplate")
+        S.Round(f)
+        f.icon = f:CreateTexture(nil, "ARTWORK")
+        f.icon:SetSize(20, 20)
+        f.icon:SetPoint("LEFT", f, "LEFT", 8, 0)
+        f.title = S.Text(f, "GameFontHighlightSmall", 36, 6, 200)
+        f.title:SetWordWrap(false)
+        f.sub = S.Text(f, "GameFontDisableSmall", 36, 21, 200)
+        f.sub:SetWordWrap(false)
+        f.button = S.Button(f, 110, 22, "", nil)
+        f.button:SetPoint("RIGHT", f, "RIGHT", -6, 0)
+        U.sourceLines[i] = f
+    end
+    local width = (U.detail:GetWidth() or 300) - 24
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+    f:SetSize(width, 38)
+    f:SetBackdropColor(.122, .141, .172, 1)
+    f.icon:SetTexture(SOURCE_ICONS[kind] or SOURCE_ICONS.world)
+    f.title:SetWidth(width - 160)
+    f.sub:SetWidth(width - 160)
+    f.title:SetText(title or "")
+    f.sub:SetText(sub or "")
+    f.button:SetShown(callback ~= nil)
+    if callback then
+        f.button:SetText(buttonText)
+        f.button:SetScript("OnClick", callback)
+    end
+    f:Show()
+    detailY = detailY + 42
+end
+U.priceBox = CreateFrame("EditBox", nil, U.detail, "InputBoxTemplate")
+U.priceBox:SetSize(60, 20)
+U.priceBox:SetAutoFocus(false)
+U.priceBox:SetNumeric(true)
+U.priceBox:SetMaxLetters(6)
+U.priceBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+U.priceBox:Hide()
 
 local function section(title)
     detailY = detailY + 8
@@ -767,10 +837,14 @@ local function resetDetail()
     S.HideMetrics(U.detail)
     U.action:Hide()
     U.action2:Hide()
+    U.wishButton:Hide()
     hideBars()
     hideSteps()
     for _, f in ipairs(U.itemLines) do f:Hide() end
     U.itemLines.used = 0
+    for _, f in ipairs(U.sourceLines) do f:Hide() end
+    U.sourceLines.used = 0
+    U.priceBox:Hide()
     U.detailLink = nil
     detailY = 0
 end
@@ -846,12 +920,25 @@ local function gearRows(equipped, profile)
 end
 
 -- Detail panels -------------------------------------------------------------------------------------------------------
+U.wishButton = S.Button(U.detail, 130, 24, "", function()
+    if U.detailLink then GP.Wish.Toggle(U.detailLink) end
+end)
+U.wishButton:SetPoint("TOPRIGHT", U.detail, "TOPRIGHT", -12, -12)
+U.wishButton:Hide()
 local function showHead(icon, name, sub, link)
     U.detailIcon:SetTexture(icon or "Interface\\PaperDoll\\UI-Backpack-EmptySlot")
     U.detailName:SetText(name or "")
     U.detailSub:SetText(sub or "")
     U.detailLink = link
-    local width = (U.detail:GetWidth() or 300) - 72
+    local onList = link and GP.Wish and GP.Wish.Has(link)
+    U.wishButton:SetShown(link ~= nil)
+    U.wishButton:SetText(onList and L("On wishlist") or L("+ Wishlist"))
+    if onList then S.Primary(U.wishButton) else
+        U.wishButton:SetBackdropColor(.114, .133, .165, 1)
+        local label = U.wishButton:GetFontString()
+        if label then label:SetTextColor(.88, .69, .31) end
+    end
+    local width = (U.detail:GetWidth() or 300) - 72 - (link and 140 or 0)
     U.detailName:SetWidth(width)
     U.detailSub:SetWidth(width)
     detailY = math.max(58, 40 + (U.detailName:GetStringHeight() or 16))
@@ -1053,6 +1140,102 @@ local function showWeapons(data, profile)
     end
 end
 
+local function chanceLabel(chance)
+    return chance and (L("Drop chance") .. " " .. ("%d %%"):format(math.floor(chance * 100 + .5))) or (L("Drop chance") .. " " .. L("unknown"))
+end
+local function showSources(id, item)
+    section(L("Where to get it"))
+    local sources = GP.Wish.Sources(id)
+    local cp = GP.CraftPilot()
+    local db = ForeverDB
+    for _, src in ipairs(sources) do
+        if src.kind == "quest" then
+            local chain = GP.Route.Chain(src.questID)
+            sourceLine2("quest", GP.Sources.QuestTitle(src.questID, src.name), L("Quest") .. " · " .. (L("Level %d")):format(src.level or 0)
+                .. (src.giver and (" · " .. src.giver) or "") .. (src.zone and (", " .. src.zone) or ""),
+                #chain > 1 and (L("Chain (%d)")):format(#chain) or L("Waypoint"),
+                function() if #chain > 1 then GP.Route.ToChain(src.questID) else GP.Route.ToGiver(src.questID) end end)
+        elseif src.kind == "dungeon" then
+            local entrance = db and GP.Sources.Entrance(db, src.name)
+            sourceLine2("dungeon", GP.Sources.DungeonName(src) .. (src.raid and (" (" .. L("raid") .. ")") or ""),
+                (src.boss or "?") .. " · " .. chanceLabel(src.chance), entrance and L("Entrance") or nil,
+                entrance and function() GP.Route.ToSpot(entrance, GP.Sources.DungeonName(src), src.boss) end or nil)
+        elseif src.kind == "vendor" then
+            sourceLine2("vendor", src.name, L("Vendor"), L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end)
+        elseif src.kind == "craft" then
+            local known = GP.Professions()[src.profession]
+            sourceLine2("craft", src.name, L(professionNames[src.profession] or src.profession)
+                .. (src.learn and (" · " .. (L("skill %d")):format(src.learn)) or "") .. (known and (" · " .. L("your profession")) or ""),
+                cp and L("CraftPilot") or nil,
+                cp and function()
+                    if cp.GoLearn then pcall(cp.GoLearn, cp, src.profession, src.recipeID) end
+                    if cp.OpenItemInDB then pcall(cp.OpenItemInDB, cp, id) end
+                end or nil)
+        elseif src.kind == "mob" then
+            sourceLine2("mob", src.name, L("Mob") .. (src.level and (" · " .. (L("Level %d")):format(src.level)) or "") .. " · " .. chanceLabel(src.chance),
+                L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end)
+        elseif src.kind == "world" then
+            sourceLine2("world", L("World drop"), (L("from level %d")):format(src.level or 1))
+        end
+    end
+    local price = GP.AuctionPrice(id)
+    if price then
+        local age = GP.AuctionAge(id)
+        sourceLine2("auction", L("Auction house") .. " · " .. money(price), age and (age == 0 and L("today") or (L("%d d ago"):format(age))) or L("last scan"),
+            GP.AuctionHouseOpen() and L("Search") or nil, GP.AuctionHouseOpen() and function() GP.SearchAuction({ item and item.name or "" }) end or nil)
+    end
+    if #sources == 0 and not price then
+        detailLine("GameFontDisableSmall", GP.Sources.Database() and L("No known source yet.") or L("ForeverDB missing"), C.muted)
+    end
+end
+
+local function showWish(data, profile)
+    local item, id = data.item, data.id
+    local wish = GP.Wish.List()[id] or {}
+    showItemHead(item, L(P.slotNames[data.slot] or "") .. (wish.goal and (" · |cffe0b050" .. L("goal") .. "|r") or ""))
+    local width = (U.detail:GetWidth() or 300) - 24
+    local result = data.result
+    local first
+    if data.owned then first = { label = L("Status"), value = L("received"), color = C.green, emphasis = true }
+    elseif result and result.worn then first = { label = L("Status"), value = L("worn"), color = C.green, emphasis = true }
+    elseif result and result.usable == false then first = { label = L("Score gain"), value = L("not usable"), color = C.red, emphasis = true }
+    elseif result then first = { label = L("Score gain"), note = percentText(result.gain or 0, result.base), value = signed(result.gain or 0),
+        color = (result.gain or 0) >= 0 and C.green or C.red, emphasis = true }
+    else first = { label = L("Score gain"), value = "…", color = C.muted, emphasis = true } end
+    S.Metrics(U.detail, {
+        first,
+        { label = data.bis and L("Score") or L("Required level"), value = data.bis and number(data.score or 0) or tostring(item.minLevel or "?"), color = C.text },
+        { label = L("Auction price"), value = money(GP.AuctionPrice(id)), color = C.text },
+    }, 12, detailY, width)
+    detailY = detailY + 60
+    if data.bis then
+        detailLine("GameFontDisableSmall", L("Calculated by GearPilot with your profile's weights; not an official BIS list. Set bonuses and random effects are not scored."), { .92, .66, .35 })
+    end
+    local note = GP.Skills.Note(item)
+    if note then detailLine("GameFontHighlightSmall", "|cffeba85a" .. note .. "|r") end
+    if GP.Wish.Has(id) then
+        actions({ wish.goal and L("Goal: yes") or L("Goal for this slot"), function() GP.Wish.SetGoal(id, not wish.goal); GP.Render() end, 170 },
+            { L("Remove"), function() GP.Wish.Remove(id) end, 110 })
+        detailLine("GameFontHighlightSmall", L("Wish price in the auction house (gold, Enter):"), C.text)
+        U.priceBox:ClearAllPoints()
+        U.priceBox:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 260, -(detailY - 22))
+        U.priceBox:SetText(wish.price and tostring(math.floor(wish.price / 10000)) or "")
+        U.priceBox:SetScript("OnEnterPressed", function(self)
+            local gold = tonumber(self:GetText() or "")
+            GP.Wish.SetPrice(id, gold and gold * 10000 or nil)
+            self:ClearFocus()
+        end)
+        U.priceBox:Show()
+    else
+        actions({ L("+ Wishlist"), function() GP.Wish.Add(id) end, 150 }, { L("As goal"), function() GP.Wish.Add(id, true) end, 120 })
+    end
+    showSources(id, item)
+    if result and result.current then
+        section(L("Values compared"))
+        statLines(P.Diff(item, result.current), profile)
+    end
+end
+
 local function showZone(zone)
     showHead("Interface\\Icons\\INV_Misc_Map_01", zone.zone, (L("%d quest upgrades"):format(#zone.results)))
     local width = (U.detail:GetWidth() or 300) - 24
@@ -1251,6 +1434,9 @@ local function renderSettings()
     text("GameFontNormal", L("Need and greed"), C.gold)
     text("GameFontHighlightSmall", L("A chat line for every roll: upgrade for you, how much, or not usable."))
     toggle("roll", "rollHelp")
+    text("GameFontNormal", L("Wishlist hints"), C.gold)
+    text("GameFontHighlightSmall", L("Chat hints when a wishlist item is in the auction house (at or below your wish price), when your target or the dungeon you enter can drop one, and when you receive it."))
+    toggle("wish", "wishAlerts")
     text("GameFontNormal", L("Minimap button"), C.gold)
     text("GameFontHighlightSmall", L("Left click opens GearPilot, right click the settings. Drag it around the minimap. GearPilot is also in the addon list button of the minimap."))
     toggle("minimap", "minimap")
@@ -1280,6 +1466,8 @@ local function renderHelp()
     text("GameFontNormal", L("Views"), C.gold)
     text("GameFontHighlightSmall", L("Quests by zone: where questing pays most, with waypoints to every quest giver. Dungeons per dungeon: the expected gain of one run (score gain times drop chance) plus the dungeon quests."))
     text("GameFontHighlightSmall", L("Buy & craft: vendor gear, the auction house (Auctionator prices) and recipes from CraftPilot. Bags: upgrades, and gear that can go."))
+    text("GameFontHighlightSmall", L("Wishlist: add items with the button in any item details or with Ctrl+Alt-click (Alt-click stays with CraftPilot). Every source is listed with a waypoint, the dungeon entrance or the hand-over to CraftPilot. One goal per slot gives your own BIS list; share it as text."))
+    text("GameFontHighlightSmall", L("BIS (calculated): GearPilot works out the best item per slot from quests, dungeons, vendors and crafting with your profile's weights. It is not an official BIS list: set bonuses and random effects are not scored and the weights are provisional."))
     text("GameFontHighlightSmall", L("Auction house: upgrades from your last Auctionator scan, with how old each price is, a maximum price (presets or your own amount) and a search button while the auction house is open."))
     text("GameFontHighlightSmall", L("Quest chains: steps you skipped (optional or breadcrumb quests) count as done, grey quests are marked, and quests whose alternative you have done are hidden. A Classic quest and its Forever replacement count as one."))
     text("GameFontHighlightSmall", L("Equipped gear, weapon setup: your best two-hand weapon against your best main hand and off hand, from what you wear and carry or from every source in your level range."))
@@ -1297,11 +1485,90 @@ local titles = {
     dungeons = { "Dungeons", "Dungeon drops that improve your gear" },
     shop = { "Buy & craft", "Vendors, auction house and crafting" },
     auction = { "Auction house", "Upgrades from your last Auctionator scan" },
+    wishlist = { "Wishlist", "Items you want, where they come from and the way there" },
     bags = { "Bags", "Items in your bags that beat what you wear" },
     gear = { "Equipped gear", "Your equipment and its score" },
     settings = { "Settings", "Level range, stat profile, sources and helpers" },
     help = { "Help", "How GearPilot works" },
 }
+
+-- Best in slot, calculated: pool of quest rewards, dungeon drops (with or without raids), vendor items and
+-- CraftPilot recipes up to the target level. Cached until the item data is complete.
+local bisCache = {}
+local function sourceShort(row)
+    if not row then return "" end
+    if row.source == "Quests" then return L("Quest") .. " " .. (row.name or "") end
+    if row.source == "Dungeons" then return GP.Sources.DungeonName(row) end
+    if row.source == "Vendors" then return L("Vendor: ") .. (row.name or "") end
+    if row.source == "Crafted" then return L(professionNames[row.profession] or row.profession or "") end
+    return ""
+end
+function GP.BisList(s, low, high, profile, player, equipped)
+    local target = s.bisTarget or "now"
+    local maxLevel = target == "now" and high or 60
+    local minLevel = target == "now" and math.max(1, player.level - 10) or 45
+    local key = table.concat({ target, profile.key, player.level, maxLevel, s.slotFilter or "all" }, ":")
+    local cached = bisCache[key]
+    if cached and not cached.loading then return cached.list, false, {}, "bis" end
+    local db = GP.Sources.Database()
+    if not db then return {}, false, { missing = true }, "bis" end
+    local rows = {}
+    for _, row in ipairs(GP.Sources.Rows(player.class, player.faction, s.minChance, player.raceBit) or {}) do rows[#rows + 1] = row end
+    local cp = GP.CraftPilot()
+    if cp then
+        GP.craftedRows = GP.craftedRows or GP.Sources.Crafted(cp.CatalogData, db, player.class)
+        for _, row in ipairs(GP.craftedRows) do rows[#rows + 1] = row end
+    end
+    local pool, loading, seen = {}, false, {}
+    for _, row in ipairs(rows) do
+        local info = db.item[row.itemID]
+        local required = info and info[3] or 0
+        local wanted = required <= maxLevel and required >= minLevel and not seen[row.itemID]
+            and (target == "raid" or not (row.raid or row.raidQuest))
+        if wanted then
+            -- Cheap check before loading the item: armor type and weapon class from ForeverDB.
+            local light = { classID = info[5], subclassID = info[6], equip = P.inventoryTypes[info[7]], minLevel = required }
+            if light.equip and P.CanUse(light, player.class, math.max(player.level, required)) then
+                seen[row.itemID] = true
+                local item = GP.ItemData(row.itemID)
+                if item.name then
+                    pool[#pool + 1] = { item = item, key = row.itemID, entry = { source = row.source, row = row, choiceGroup = row.choiceGroup } }
+                else
+                    loading = true
+                end
+            end
+        end
+    end
+    local list = {}
+    for _, best in ipairs(P.BestInSlot(pool, profile, player.class, player.level, maxLevel)) do
+        if GP.SlotAllowed(best.slot) then
+            local id = best.item.id
+            local worn = equipped[best.slot] and equipped[best.slot].id == id
+            list[#list + 1] = { kind = "bis", bis = true, key = "bis:" .. best.slot, id = id, item = best.item, slot = best.slot,
+                score = best.score, owned = worn or GP.Wish.Owned(id),
+                result = P.Compare(best.item, equipped, profile, player.class, player.level),
+                sourceText = sourceShort(best.entry and best.entry.row) }
+        end
+    end
+    bisCache[key] = { list = list, loading = loading }
+    return list, loading, {}, "bis"
+end
+function GP.AdoptBis()
+    local s = GP.settings
+    local player = GP.Player()
+    local low, high = P.Range(player.level, s.below, s.above)
+    local list = GP.BisList(s, low, high, GP.ActiveProfile(), player, GP.ReadGear())
+    local count = 0
+    for _, data in ipairs(list) do
+        if not data.owned then
+            GP.Wish.List()[data.id] = GP.Wish.List()[data.id] or { added = time and time() or 0 }
+            GP.Wish.SetGoal(data.id, true)
+            count = count + 1
+        end
+    end
+    if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffe0b050GearPilot|r " .. (L("%d BIS items taken over as goals."):format(count))) end
+    GP.Render()
+end
 
 -- What the list of a page shows: kind and data.
 local function pageData(page, s, low, high, equipped, profile, player)
@@ -1412,6 +1679,44 @@ local function pageData(page, s, low, high, equipped, profile, player)
         end
         return list, loading, states, "upgrade"
     end
+    if page == "wishlist" then
+        local itemSlot = function(item)
+            local slots = item and item.equip and P.targetSlots[item.equip]
+            return slots and slots[1]
+        end
+        if (s.views.wishlist or "list") == "bis" then
+            return GP.BisList(s, low, high, profile, player, equipped)
+        end
+        local list, loading = {}, false
+        for id, wish in pairs(GP.Wish.List()) do
+            local item = GP.ItemData(id)
+            if item.name then
+                local slot = itemSlot(item)
+                if not slot or GP.SlotAllowed(slot) then
+                    local result = P.Compare(item, equipped, profile, player.class, player.level)
+                    local first = GP.Wish.Sources(id)[1]
+                    local sourceText = first and (first.kind == "quest" and (L("Quest") .. " " .. (first.name or ""))
+                        or first.kind == "dungeon" and GP.Sources.DungeonName(first) or first.kind == "vendor" and (L("Vendor: ") .. first.name)
+                        or first.kind == "craft" and L(professionNames[first.profession] or first.profession)
+                        or first.kind == "mob" and first.name or first.kind == "world" and L("World drop")) or nil
+                    list[#list + 1] = { kind = "wish", key = "wish:" .. id, id = id, item = item, wish = wish, slot = result and result.slot or slot,
+                        result = result, owned = wish.got or GP.Wish.Owned(id), sourceText = sourceText }
+                end
+            else
+                loading = true
+            end
+        end
+        table.sort(list, function(a, b)
+            if (a.wish.goal and true or false) ~= (b.wish.goal and true or false) then return a.wish.goal == true end
+            if a.owned ~= b.owned then return not a.owned end
+            local ga, gb = a.result and a.result.gain or -math.huge, b.result and b.result.gain or -math.huge
+            if ga ~= gb then return ga > gb end
+            return a.id < b.id
+        end)
+        local reached, goals = GP.Wish.Progress()
+        GP.wishSummary = goals > 0 and (L("Goals: %d of %d reached")):format(reached, goals) or nil
+        return list, loading, {}, "wish"
+    end
     if page == "auction" then
         -- Every item with a price from your last scan: required level from 10 below your level to the top of the range.
         local entries, loading, state = GP.AuctionCandidates(player.level - 10, high)
@@ -1462,6 +1767,14 @@ local function emptyMessage(page, kind, loading, states)
         return L("ForeverDB is not installed. Quests and dungeons need it; the CurseForge app installs it with GearPilot. Bag upgrades work without it.")
     end
     if loading then return L("Loading item data …") end
+    if page == "wishlist" then
+        if kind == "bis" then
+            if loading then return L("Calculating … item data is still loading.") end
+            return GP.Sources.Database() and L("No items found for this target.") or L("ForeverDB missing")
+        end
+        if (GP.settings.slotFilter or "all") ~= "all" then return L("No wishlist items for this slot.") end
+        return L("Your wishlist is empty. Add items with the button in any item details or with Ctrl+Alt-click on an item.")
+    end
     if page == "auction" then
         if states.noauction then return L("Auctionator is not installed. The auction house page uses its scan prices.") end
         if states.noprices then return L("No prices yet: open the auction house and let Auctionator scan it.") end
@@ -1505,6 +1818,27 @@ local function fillRow(r, kind, data, width, list)
             local diff = set.score - data.sets.current.score
             r.value:SetText(signed(diff))
             color(r.value, diff > 0 and C.green or diff < 0 and C.red or C.muted)
+        end
+    elseif kind == "wish" or kind == "bis" then
+        r.icon:SetTexture(item.icon)
+        r.name:SetText(S.QualityColor(item.quality) .. item.name .. "|r")
+        local wish = GP.Wish.List()[data.id]
+        local status = data.owned and ("|cff85d6a0" .. L("received") .. "|r") or (wish and wish.goal and ("|cffe0b050" .. L("goal") .. "|r"))
+            or (kind == "bis" and wish and L("on wishlist")) or nil
+        local where = data.sourceText or ""
+        r.sub:SetText(L(P.slotNames[data.slot] or "") .. (status and (" · " .. status) or "") .. (where ~= "" and (" · " .. where) or ""))
+        local result = data.result
+        if data.owned or (result and result.worn) then
+            r.value:SetText(L("worn"))
+            color(r.value, C.muted)
+        elseif result and result.usable == false then
+            r.value:SetText("-")
+            color(r.value, C.red)
+        elseif result and result.gain then
+            r.value:SetText(signed(result.gain))
+            color(r.value, result.gain >= 0 and C.green or C.red)
+        else
+            r.value:SetText("")
         end
     elseif kind == "zone" then
         r.icon:SetTexture("Interface\\Icons\\INV_Misc_Map_01")
@@ -1590,6 +1924,13 @@ function GP.Render()
     local equipped = GP.ReadGear()
     local list, loading, states, kind = pageData(page, s, low, high, equipped, profile, player)
     if page == "quests" and GP.questSummary then U.pageSub:SetText(L(titles[page][2]) .. "  ·  " .. GP.questSummary) end
+    if page == "wishlist" then
+        if kind == "bis" then
+            U.pageSub:SetText(L("Best in slot calculated by GearPilot with your profile (not an official list)"))
+        elseif GP.wishSummary then
+            U.pageSub:SetText(L(titles[page][2]) .. "  ·  " .. GP.wishSummary)
+        end
+    end
     GP.view = kind
     local selectKey = page .. kind
 
@@ -1643,6 +1984,8 @@ function GP.Render()
         showGear(found, profile)
     elseif kind == "weapons" then
         showWeapons(found, profile)
+    elseif kind == "wish" or kind == "bis" then
+        showWish(found, profile)
     elseif kind == "zone" then
         showZone(found)
     elseif kind == "dungeon" then
