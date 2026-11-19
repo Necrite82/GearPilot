@@ -422,6 +422,16 @@ function Map.Chain(questID)
     local last = chain[#chain]
     Map.Show(last and last.title or L("Quest chain"), points)
 end
+-- One place: a vendor, a mob (ForeverDB reference "c123") or any spot.
+function Map.Place(heading, title, sub, ref, spot)
+    spot = spot or (ref and ForeverDB and GP.Sources.Spot(ForeverDB, ref))
+    local uiMap, x, y = GP.Sources.MapPoint(spot)
+    local points = {}
+    if uiMap and x then
+        points[1] = { uiMap = uiMap, x = x, y = y, kind = ref and "quest" or "entrance", title = title, sub = sub }
+    end
+    Map.Show(heading, points)
+end
 function Map.Quests(heading, questIDs, entrances)
     local points = {}
     for i, id in ipairs(questIDs or {}) do

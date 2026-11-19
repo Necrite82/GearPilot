@@ -1277,29 +1277,35 @@ local function showSources(id, item)
     for _, src in ipairs(sources) do
         if src.kind == "quest" then
             local chain = GP.Route.Chain(src.questID)
-            sourceLine2("quest", GP.Sources.QuestTitle(src.questID, src.name), L("Quest") .. " · " .. (L("Level %d")):format(src.level or 0)
+            local title = GP.Sources.QuestTitle(src.questID, src.name)
+            sourceLine2("quest", title, L("Quest") .. " · " .. (L("Level %d")):format(src.level or 0)
                 .. (src.giver and (" · " .. src.giver) or "") .. (src.zone and (", " .. src.zone) or ""),
                 #chain > 1 and (L("Chain (%d)")):format(#chain) or L("Waypoint"),
-                function() if #chain > 1 then GP.Route.ToChain(src.questID) else GP.Route.ToGiver(src.questID) end end)
+                function() if #chain > 1 then GP.Route.ToChain(src.questID) else GP.Route.ToGiver(src.questID) end end,
+                function() if #chain > 1 then GP.Map.Chain(src.questID) else GP.Map.Quests(title, { src.questID }) end end)
         elseif src.kind == "dungeon" then
             local entrance = db and GP.Sources.Entrance(db, src.name)
-            sourceLine2("dungeon", GP.Sources.DungeonName(src) .. (src.raid and (" (" .. L("raid") .. ")") or ""),
+            local dungeonName = GP.Sources.DungeonName(src)
+            sourceLine2("dungeon", dungeonName .. (src.raid and (" (" .. L("raid") .. ")") or ""),
                 (src.boss or "?") .. " · " .. chanceLabel(src), entrance and L("Entrance") or nil,
-                entrance and function() GP.Route.ToSpot(entrance, GP.Sources.DungeonName(src), src.boss) end or nil)
+                entrance and function() GP.Route.ToSpot(entrance, dungeonName, src.boss) end or nil,
+                entrance and function() GP.Map.Place(dungeonName, dungeonName, L("Entrance"), nil, entrance) end or nil)
         elseif src.kind == "vendor" then
-            sourceLine2("vendor", src.name, L("Vendor"), L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end)
+            sourceLine2("vendor", src.name, L("Vendor"), L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end,
+                function() GP.Map.Place(item and item.name or src.name, src.name, L("Vendor"), src.npcRef) end)
         elseif src.kind == "craft" then
             local known = GP.Professions()[src.profession]
             sourceLine2("craft", src.name, L(professionNames[src.profession] or src.profession)
                 .. (src.learn and (" · " .. (L("skill %d")):format(src.learn)) or "") .. (known and (" · " .. L("your profession")) or ""),
-                cp and L("CraftPilot") or nil,
-                cp and function()
-                    if cp.GoLearn then pcall(cp.GoLearn, cp, src.profession, src.recipeID) end
-                    if cp.OpenItemInDB then pcall(cp.OpenItemInDB, cp, id) end
-                end or nil)
+                cp and L("Recipe") or nil, cp and function() GP.OpenRecipe(src.profession, src.recipeID, id) end or nil)
+            if cp and cp.OpenCostCalculation then
+                sourceLine2("craft", L("Materials and cost"), L("CraftPilot works out the materials with the prices of your last auction house scan."),
+                    L("Show"), function() pcall(cp.OpenCostCalculation, cp, "recipe", src.profession, src.recipeID, 1) end, nil, 24)
+            end
         elseif src.kind == "mob" then
             sourceLine2("mob", src.name, L("Mob") .. (src.level and (" · " .. (L("Level %d")):format(src.level)) or "") .. " · " .. chanceLabel(src),
-                L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end)
+                L("Waypoint"), function() GP.Route.ToNPC(src.npcRef, item and item.name or src.name) end,
+                function() GP.Map.Place(item and item.name or src.name, src.name, L("Mob"), src.npcRef) end)
         elseif src.kind == "world" then
             sourceLine2("world", L("World drop"), (L("from level %d")):format(src.level or 1))
         end

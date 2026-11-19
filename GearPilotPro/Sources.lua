@@ -155,6 +155,18 @@ local function dungeonOf(db, npcID, att)
     return nil
 end
 
+-- ForeverDB lists some bosses also as vendors of their own loot. A "vendor" inside a dungeon that drops the
+-- item is that boss, not a vendor (real dungeon vendors such as Lokhtos do not drop what they sell).
+local function bossAsVendor(db, itemID, npcID, att)
+    local drops = db.drop and db.drop[itemID]
+    if not drops then return false end
+    for i = 1, #drops, 2 do
+        if drops[i] == npcID then return dungeonOf(db, npcID, att) ~= nil end
+    end
+    return false
+end
+Sources.BossAsVendor = bossAsVendor
+
 -- Boss name for a drop: ForeverDB's creature name, else ATT's.
 local function bossName(db, npcID, boss)
     local npc = db.npc and db.npc[npcID]
@@ -284,7 +296,7 @@ function Sources.Build(db, options)
                 local friendly = not side or not faction or side == "AH"
                     or (faction == "Alliance" and side == "A") or (faction == "Horde" and side == "H")
                 local npc = db.npc and db.npc[npcID]
-                if friendly and npc then list[#list + 1] = { ref = "c" .. npcID, name = npc[1] } end
+                if friendly and npc and not bossAsVendor(db, itemID, npcID, att) then list[#list + 1] = { ref = "c" .. npcID, name = npc[1] } end
             end
             if #list > 0 then
                 rows[#rows + 1] = { itemID = itemID, source = "Vendors", sourceID = "v" .. itemID, level = item[3] or 1,
@@ -395,7 +407,9 @@ function Sources.ItemSources(db, itemID, options)
         local friendly = not side or not options.faction or side == "AH"
             or (options.faction == "Alliance" and side == "A") or (options.faction == "Horde" and side == "H")
         local npc = db.npc and db.npc[npcID]
-        if friendly and npc then list[#list + 1] = { kind = "vendor", npcRef = "c" .. npcID, name = npc[1] } end
+        if friendly and npc and not bossAsVendor(db, itemID, npcID, att) then
+            list[#list + 1] = { kind = "vendor", npcRef = "c" .. npcID, name = npc[1] }
+        end
     end
     local world = db.world and db.world[itemID]
     if world then list[#list + 1] = { kind = "world", level = world } end

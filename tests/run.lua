@@ -434,6 +434,19 @@ playerLevel = 60
 assert(XP.Get(1).xp == 0 and XP.Get(1).money == 1200, "at the top level quests give money, no experience")
 ForeverDB = nil
 
+-- 1.2.3: crit and hit as percent, not as the client's rating; a boss is not a vendor of its own loot.
+local rod = St.Combine({ ITEM_MOD_CRIT_RATING_SHORT = 14, ITEM_MOD_STAMINA_SHORT = 10, ITEM_MOD_DAMAGE_PER_SECOND_SHORT = 25.7 },
+    { "Anlegen: Erhöht Eure Chance, einen kritischen Treffer zu erzielen, um 1%." }, { equip = "INVTYPE_2HWEAPON" })
+assert(rod.CRIT == 1 and rod.STA == 10, "the tooltip percent wins over the rating")
+local ratingOnly = St.Combine({ ITEM_MOD_HIT_RATING_SHORT = 10, ITEM_MOD_CRIT_RATING_SHORT = 2 }, {}, {})
+assert(ratingOnly.HIT == 1 and ratingOnly.CRIT == 2, "a rating alone is converted, a small value is a percent")
+local vendorDb = { item = { [800] = { "Boss Ring", 3, 55, 60, 4, 0, 11 } }, npc = { [1] = { "Boss", "", 60, 60, 3 }, [2] = { "Quartermaster", "", 55, 55, 1 } },
+    drop = { [800] = { 1, 1200 } }, vend = { [800] = { 1, 2 } }, spw = { c1 = { { 229, 50, 50 } } }, dng = {}, area = {} }
+local vendorList = S.ItemSources(vendorDb, 800, {})
+local vendorNames = {}
+for _, src in ipairs(vendorList) do if src.kind == "vendor" then vendorNames[#vendorNames + 1] = src.name end end
+assert(#vendorNames == 1 and vendorNames[1] == "Quartermaster", "the boss is a drop, not a vendor")
+
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)
