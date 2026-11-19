@@ -52,6 +52,13 @@ Dungeon bosses and their loot for the new Forever dungeons (The Drowned City, Kr
 
 `lua5.1 tests/run.lua` runs the tooltip parser, planner and source checks. `python3 tools/build_release.py` rebuilds the install archive in `dist/`; GitHub Actions checks the Lua syntax, runs the tests and fails when the archive does not match the source.
 
+## Release
+
+1. Set `## Version: x.y.z` in `GearPilotPro/GearPilotPro.toc`, run `python3 tools/build_release.py` and add `docs/RELEASE_x.y.z.md` (changelog).
+2. Merge into `main`, then start **Actions → Release → Run workflow**. It runs the checks, creates the tag and GitHub release and uploads the ZIP to CurseForge with ForeverDB as required dependency (`tools/upload_curseforge.py`; needs `## X-Curse-Project-ID` in the TOC and the secret `CF_API_TOKEN`).
+
+The CurseForge project description is `docs/CURSEFORGE_DESCRIPTION.md`.
+
 ## License
 
 GPL-3.0. `Data/Dungeons.lua` contains data from AllTheThings, MIT License (`Data/LICENSE-AllTheThings.txt`).
