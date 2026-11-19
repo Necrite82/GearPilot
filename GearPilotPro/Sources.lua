@@ -157,6 +157,7 @@ function Sources.Build(db, options)
                         choiceGroup = choice and ("q" .. questID) or nil, giver = npcName(db, giver),
                         giverRef = giver, zone = zone and zone[1] or (dungeon and dungeon[1]) or nil,
                         dungeonQuest = dungeon and dungeon[1] or nil,
+                        exclusive = type(detail[5]) == "table" and detail[5] or nil,
                     }
                 end
             end
@@ -379,6 +380,47 @@ function Sources.MapName(uiMap)
     return info and info.name or nil
 end
 
-function Sources.QuestDone(questID)
+-- Classic quest <-> Forever replacement of the same name: done in either version counts as done.
+function Sources.Twins(db)
+    local byTitle, twins = {}, {}
+    for id, quest in pairs(db.quest or {}) do
+        local title = quest[1]
+        if title then
+            byTitle[title] = byTitle[title] or {}
+            table.insert(byTitle[title], id)
+        end
+    end
+    for _, ids in pairs(byTitle) do
+        if #ids > 1 then
+            for _, a in ipairs(ids) do
+                for _, b in ipairs(ids) do
+                    if (a < FOREVER_IDS and b >= FOREVER_IDS) or (b < FOREVER_IDS and a >= FOREVER_IDS) then
+                        twins[a] = twins[a] or {}
+                        table.insert(twins[a], b)
+                    end
+                end
+            end
+        end
+    end
+    return twins
+end
+local function flagged(questID)
     return C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
+end
+function Sources.QuestDone(questID)
+    if flagged(questID) then return true end
+    if type(ForeverDB) == "table" and ForeverDB.quest then
+        Sources.twins = Sources.twins or Sources.Twins(ForeverDB)
+        for _, twin in ipairs(Sources.twins[questID] or {}) do
+            if flagged(twin) then return true end
+        end
+    end
+    return false
+end
+-- A quest that cannot be taken any more because its alternative (exclusiveTo) is done.
+function Sources.Excluded(row)
+    for _, other in ipairs(row.exclusive or {}) do
+        if Sources.QuestDone(other) then return true end
+    end
+    return false
 end

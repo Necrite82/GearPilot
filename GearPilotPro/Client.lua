@@ -97,6 +97,7 @@ function GP.ReadCandidates(source, low, high)
             or (dungeonQuests == "hide" and not isDungeonQuest) or (dungeonQuests == "only" and isDungeonQuest)
         local info = db.item[row.itemID]
         local required = info and info[3] or 0
+        if wanted and row.exclusive and GP.Sources.Excluded(row) then wanted = false end
         if wanted and row.source == source and row.level >= low and row.level <= high and required <= high
             and (source ~= "Quests" or not GP.Sources.QuestDone(row.sourceID)) then
             add({
@@ -114,7 +115,7 @@ local function bounded(value, fallback, lower, upper)
     return math.max(lower, math.min(upper, math.floor(value)))
 end
 local chances = { [0.01] = true, [0.02] = true, [0.05] = true, [0.1] = true }
-local pages = { upgrades = true, quests = true, dungeons = true, shop = true, bags = true, gear = true, settings = true, help = true }
+local pages = { upgrades = true, quests = true, dungeons = true, shop = true, auction = true, bags = true, gear = true, settings = true, help = true }
 local function initialize()
     local player = GP.Player()
     local saved = type(GearPilotProSettings) == "table" and GearPilotProSettings or {}
@@ -138,6 +139,10 @@ local function initialize()
     saved.shopSort = (saved.shopSort == "price" or saved.shopSort == "value") and saved.shopSort or "gain"
     saved.shopMax = tonumber(saved.shopMax) or 0
     saved.slotFilter = type(saved.slotFilter) == "string" and saved.slotFilter or "all"
+    saved.ahSort = (saved.ahSort == "price" or saved.ahSort == "value") and saved.ahSort or "gain"
+    saved.ahMax = tonumber(saved.ahMax) or 0
+    saved.ahAge = (saved.ahAge == "today" or saved.ahAge == "week") and saved.ahAge or "all"
+    saved.chains = saved.chains == "started" and "started" or "all"
     if saved.minimap == nil then saved.minimap = true end
     if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"
@@ -168,6 +173,52 @@ function GP.AuctionPrice(itemID)
     local ok, value = pcall(Auctionator.API.v1.GetAuctionPriceByItemID, "GearPilot", itemID)
     return ok and type(value) == "number" and value or nil
 end
+-- Days since Auctionator last saw the price (newer Auctionator versions only).
+function GP.AuctionAge(itemID)
+    local api = GP.HasAuctionPrices() and Auctionator.API.v1
+    if not (api and api.GetAuctionAgeByItemID) then return nil end
+    local ok, value = pcall(api.GetAuctionAgeByItemID, "GearPilot", itemID)
+    return ok and type(value) == "number" and value or nil
+end
+-- Search the open auction house for item names (Auctionator does the search).
+function GP.SearchAuction(names)
+    local api = GP.HasAuctionPrices() and Auctionator.API.v1
+    if not (api and api.MultiSearchExact) then return false end
+    return pcall(api.MultiSearchExact, "GearPilot", names)
+end
+function GP.AuctionHouseOpen()
+    local frame = rawget(_G, "AuctionHouseFrame") or rawget(_G, "AuctionFrame")
+    return frame and frame.IsShown and frame:IsShown() or false
+end
+-- Auction house page: every equippable item with an Auctionator price, required level from fromLevel to toLevel.
+-- Returns entries, loading, state ("noauction" without Auctionator, "noprices" without any price).
+function GP.AuctionCandidates(fromLevel, toLevel)
+    local entries, loading = {}, false
+    if not GP.HasAuctionPrices() then return entries, false, "noauction" end
+    local db = GP.Sources.Database()
+    if not db then return entries, false, "missing" end
+    local player = GP.Player()
+    GP.equipIndex = GP.equipIndex or GP.Sources.EquipIndex(db, player.class)
+    local priced = false
+    for level = math.max(1, fromLevel), toLevel do
+        for _, itemID in ipairs(GP.equipIndex[level] or {}) do
+            local price = GP.AuctionPrice(itemID)
+            if price and price > 0 then
+                priced = true
+                local item = itemData(itemID)
+                loading = loading or item.loading
+                if item.name then
+                    local age = GP.AuctionAge(itemID)
+                    entries[#entries + 1] = { source = "Auction", sourceID = "a" .. itemID, level = level, price = price, age = age,
+                        row = { itemID = itemID, source = "Auction", level = level, price = price, age = age },
+                        key = "AH:" .. itemID, item = item }
+                end
+            end
+        end
+    end
+    return entries, loading, priced and "ready" or "noprices"
+end
+
 -- Professions the character has, by CraftPilot key (blacksmithing, tailoring, ...).
 local professionKeys = {
     [164] = "blacksmithing", [165] = "leatherworking", [197] = "tailoring", [202] = "engineering",
@@ -226,6 +277,7 @@ local events = CreateFrame("Frame")
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "PLAYER_EQUIPMENT_CHANGED",
     "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "ITEM_DATA_LOAD_RESULT", "PLAYER_TALENT_UPDATE", "SKILL_LINES_CHANGED",
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
 }) do
     events:RegisterEvent(event)
 end
