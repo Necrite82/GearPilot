@@ -827,12 +827,27 @@ local function hideSteps()
     U.progress.track:Hide()
     U.progress.fill:Hide()
 end
+-- Quest chains open in full (by target quest) until the window closes; closed shows the first and the next step.
+GP.chainOpen = {}
+U.chainToggle = S.Button(U.detail, 220, 22, "", nil)
+U.chainToggle:Hide()
 local function chainSteps(chain, targetID)
     local done, nextIndex = P.ChainStatus(chain)
     local playerLevel = GP.Player().level
     local width = (U.detail:GetWidth() or 300) - 24
+    local ids = {}
+    for _, st in ipairs(chain) do ids[#ids + 1] = st.id end
+    GP.QuestXP.Request(ids)
+    -- Experience still open in this chain.
+    local open = {}
+    for _, st in ipairs(chain) do
+        if not st.done and not st.skipped then open[#open + 1] = { id = st.id, level = st.level } end
+    end
+    local xp, _, unknown = GP.QuestXP.Sum(open)
+    local xpText = (#open > 0 and xp > 0) and ("  ·  " .. (L("%s still open"):format(GP.QuestXP.Text(xp)))
+        .. (unknown > 0 and (" " .. (L("(+%d without a value)"):format(unknown))) or "")) or ""
     detailY = detailY + 8
-    detailLine("GameFontNormal", L("Quest chain") .. "  |cff9dabb8" .. (L("%d of %d done"):format(done, #chain)) .. "|r", C.gold)
+    detailLine("GameFontNormal", L("Quest chain") .. "  |cff9dabb8" .. (L("%d of %d done"):format(done, #chain)) .. xpText .. "|r", C.gold)
     U.progress.track:ClearAllPoints()
     U.progress.track:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
     U.progress.track:SetWidth(width)
@@ -842,41 +857,59 @@ local function chainSteps(chain, targetID)
     U.progress.track:Show()
     U.progress.fill:SetShown(done > 0)
     detailY = detailY + 12
+    local expanded = GP.chainOpen[targetID] or #chain <= 2
+    local shown = 0
     for i, st in ipairs(chain) do
-        local f = step(i)
-        local isNext = i == nextIndex
-        f:ClearAllPoints()
-        f:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
-        f:SetWidth(width)
-        if isNext then f:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1) else f:SetBackdropColor(0, 0, 0, 0) end
-        f.stripe:SetShown(isNext)
-        local finished = st.done or st.skipped
-        f.icon:SetTexture(finished and ICON_DONE or st.active and ICON_ACTIVE or ICON_OPEN)
-        f.icon:SetDesaturated(st.skipped or (not st.done and not st.active and not isNext))
-        f.icon:SetAlpha((st.done or st.active or isNext) and 1 or .55)
-        f.line:ClearAllPoints()
-        f.line:SetPoint("TOP", f.icon, "BOTTOM", 0, -2)
-        f.line:SetHeight(18)
-        f.line:SetShown(i < #chain)
-        f.title:SetWidth(width - 140)
-        f.sub:SetWidth(width - 140)
-        f.title:SetText(("%d. %s"):format(i, st.title))
-        local grey = not finished and P.IsGrey(st.level, playerLevel)
-        local c = st.id == targetID and C.gold or finished and { .62, .78, .66 } or grey and { .62, .62, .62 }
-            or (isNext or st.active) and C.text or C.muted
-        f.title:SetTextColor(c[1], c[2], c[3])
-        f.sub:SetText((st.giver or "?") .. (st.zone and (", " .. st.zone) or ""))
-        local badge, bc = "", C.muted
-        if st.done then badge, bc = L("done"), C.green
-        elseif st.skipped then badge, bc = L("skipped"), C.muted
-        elseif st.active then badge, bc = L("in quest log"), C.gold
-        elseif isNext then badge, bc = L("next"), C.gold end
-        if grey then badge = (badge ~= "" and (badge .. " · ") or "") .. L("grey") end
-        if st.id == targetID and not st.done then badge = (badge ~= "" and (badge .. " · ") or "") .. L("reward") end
-        f.badge:SetText(badge)
-        f.badge:SetTextColor(bc[1], bc[2], bc[3])
-        f:Show()
-        detailY = detailY + 42
+        if expanded or i == 1 or i == nextIndex then
+            shown = shown + 1
+            local f = step(shown)
+            local isNext = i == nextIndex
+            f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+            f:SetWidth(width)
+            if isNext then f:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1) else f:SetBackdropColor(0, 0, 0, 0) end
+            f.stripe:SetShown(isNext)
+            local finished = st.done or st.skipped
+            f.icon:SetTexture(finished and ICON_DONE or st.active and ICON_ACTIVE or ICON_OPEN)
+            f.icon:SetDesaturated(st.skipped or (not st.done and not st.active and not isNext))
+            f.icon:SetAlpha((st.done or st.active or isNext) and 1 or .55)
+            f.line:ClearAllPoints()
+            f.line:SetPoint("TOP", f.icon, "BOTTOM", 0, -2)
+            f.line:SetHeight(18)
+            f.line:SetShown(expanded and i < #chain)
+            f.title:SetWidth(width - 160)
+            f.sub:SetWidth(width - 160)
+            f.title:SetText(("%d. %s"):format(i, st.title))
+            local grey = not finished and P.IsGrey(st.level, playerLevel)
+            local c = st.id == targetID and C.gold or finished and { .62, .78, .66 } or grey and { .62, .62, .62 }
+                or (isNext or st.active) and C.text or C.muted
+            f.title:SetTextColor(c[1], c[2], c[3])
+            local value = GP.QuestXP.Get(st.id, st.level)
+            f.sub:SetText((st.giver or "?") .. (st.zone and (", " .. st.zone) or "")
+                .. ((not finished and value.xp and value.xp > 0) and (" · " .. GP.QuestXP.Text(value.xp)) or ""))
+            local badge, bc = "", C.muted
+            if st.done then badge, bc = L("done"), C.green
+            elseif st.skipped then badge, bc = L("skipped"), C.muted
+            elseif st.active then badge, bc = L("in quest log"), C.gold
+            elseif isNext then badge, bc = L("next"), C.gold end
+            if grey then badge = (badge ~= "" and (badge .. " · ") or "") .. L("grey") end
+            if st.id == targetID and not st.done then badge = (badge ~= "" and (badge .. " · ") or "") .. L("reward") end
+            f.badge:SetText(badge)
+            f.badge:SetTextColor(bc[1], bc[2], bc[3])
+            f:Show()
+            detailY = detailY + 42
+        end
+    end
+    if #chain > 2 then
+        U.chainToggle:SetText(expanded and L("Show fewer steps") or (L("Show all %d steps"):format(#chain)))
+        U.chainToggle:SetScript("OnClick", function()
+            GP.chainOpen[targetID] = not GP.chainOpen[targetID]
+            GP.Render()
+        end)
+        U.chainToggle:ClearAllPoints()
+        U.chainToggle:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+        U.chainToggle:Show()
+        detailY = detailY + 30
     end
 end
 
@@ -887,6 +920,7 @@ local function resetDetail()
     U.action:Hide()
     U.action2:Hide()
     U.action3:Hide()
+    U.chainToggle:Hide()
     U.wishButton:Hide()
     U.togoButton:Hide()
     U.orderUp:Hide()
@@ -1033,6 +1067,15 @@ local function questBlock(row)
     detailLine("GameFontHighlightSmall", (L("Quest level %d"):format(row.level))
         .. (row.minLevel and row.minLevel > 0 and (" · " .. L("from level %d"):format(row.minLevel)) or ""))
     if row.giver then detailLine("GameFontHighlightSmall", L("Quest giver: ") .. row.giver .. (row.zone and (", " .. row.zone) or "")) end
+    GP.QuestXP.Request({ row.sourceID })
+    local value = GP.QuestXP.Get(row.sourceID, row.level)
+    if (value.xp and value.xp > 0) or value.money then
+        local parts = {}
+        if value.xp and value.xp > 0 then parts[#parts + 1] = GP.QuestXP.Text(value.xp) end
+        if value.money then parts[#parts + 1] = money(value.money) end
+        detailLine("GameFontHighlightSmall", L("Reward: ") .. table.concat(parts, " · ")
+            .. (value.source == "server" and "" or (" |cff9dabb8" .. L("(ForeverDB)") .. "|r")))
+    end
     if row.dungeonQuest then
         detailLine("GameFontHighlightSmall", "|cffd9a35a" .. L("Dungeon quest: ") .. row.dungeonQuest .. "|r")
     end
@@ -1406,12 +1449,36 @@ local function showDungeon(dungeon, profile, equipped)
     U.detailName:SetWidth((U.detail:GetWidth() or 300) - 72 - 140)
     local quests, open = GP.Togo.Quests(d)
     local width = (U.detail:GetWidth() or 300) - 24
+    -- Experience: open dungeon quests and the open steps before them (each quest once).
+    local chains, openSteps, seenSteps, ask = {}, {}, {}, {}
+    for _, info in ipairs(quests) do
+        ask[#ask + 1] = info.id
+        if not info.done then
+            local chain = GP.Route.Chain(info.id)
+            P.ChainStatus(chain)
+            chains[info.id] = chain
+            for _, st in ipairs(chain) do
+                ask[#ask + 1] = st.id
+                if not st.done and not st.skipped and not seenSteps[st.id] then
+                    seenSteps[st.id] = true
+                    openSteps[#openSteps + 1] = { id = st.id, level = st.level }
+                end
+            end
+        end
+    end
+    GP.QuestXP.Request(ask)
+    local totalXP, _, withoutXP = GP.QuestXP.Sum(openSteps)
     S.Metrics(U.detail, {
         { label = L("Expected per run"), value = "Ø " .. signed(dungeon.expected), color = C.green, emphasis = true },
         { label = L("Upgrades"), value = tostring(#dungeon.results), color = C.text },
-        { label = L("Open quests"), value = (#quests > 0) and (open .. " / " .. #quests) or "0", color = C.text },
+        { label = L("Open quests"), note = totalXP > 0 and GP.QuestXP.Text(totalXP) or nil,
+            value = (#quests > 0) and (open .. " / " .. #quests) or "0", color = C.text },
     }, 12, detailY, width)
     detailY = detailY + 60
+    if totalXP > 0 then
+        detailLine("GameFontHighlightSmall", (L("The open quests give %s, pre-quests included."):format(GP.QuestXP.Text(totalXP)))
+            .. (withoutXP > 0 and (" " .. (L("(+%d without a value)"):format(withoutXP))) or ""), C.text)
+    end
     if (dungeon.estimated or 0) > 0 then
         detailLine("GameFontDisableSmall", (L("%d drop chances are estimated from the boss's loot table (AllTheThings)."):format(dungeon.estimated)), C.muted)
     end
@@ -1447,7 +1514,7 @@ local function showDungeon(dungeon, profile, equipped)
     if #quests > 0 then
         section(L("Quests") .. "  |cff9dabb8" .. (L("%d of %d done"):format(#quests - open, #quests)) .. "|r")
         for _, info in ipairs(quests) do
-            local chain = info.done and {} or GP.Route.Chain(info.id)
+            local chain = chains[info.id] or {}
             local done = 0
             if #chain > 1 then done = P.ChainStatus(chain) end
             local parts = { (L("Level %d")):format(info.level or 0) }
@@ -1456,6 +1523,8 @@ local function showDungeon(dungeon, profile, equipped)
             elseif info.active then parts[#parts + 1] = "|cffe0b050" .. L("in quest log") .. "|r"
             elseif #chain > 1 then parts[#parts + 1] = (L("chain %d of %d"):format(done, #chain)) end
             if not info.done then
+                local value = GP.QuestXP.Get(info.id, info.level)
+                if value.xp and value.xp > 0 then parts[#parts + 1] = GP.QuestXP.Text(value.xp) end
                 local reward = bestReward(info.id, equipped, profile, player)
                 if reward then parts[#parts + 1] = "|cff85d6a0" .. signed(reward.gain) .. "|r " .. (reward.item.name or "") end
             end
@@ -1901,8 +1970,11 @@ local function pageData(page, s, low, high, equipped, profile, player)
             entry.catalog = d
             entry.low, entry.high = d.low, d.high
             entry.inRange = GP.DungeonInRange(d, dLow, dHigh)
-            local _, open = GP.Togo.Quests(d)
+            local quests, open = GP.Togo.Quests(d)
             entry.openQuests = open
+            local openList = {}
+            for _, info in ipairs(quests) do if not info.done then openList[#openList + 1] = info end end
+            entry.openXP = GP.QuestXP.Sum(openList)
             return entry
         end
         local list = {}
@@ -2153,7 +2225,10 @@ local function fillRow(r, kind, data, width, list)
         local parts = { (L("Level %d–%d"):format(data.low, data.high)) }
         if not data.inRange then parts[#parts + 1] = L("outside your range") end
         if #data.results > 0 then parts[#parts + 1] = (L("%d upgrades"):format(#data.results)) end
-        if (data.openQuests or 0) > 0 then parts[#parts + 1] = (L("%d open quests"):format(data.openQuests)) end
+        if (data.openQuests or 0) > 0 then
+            parts[#parts + 1] = (L("%d open quests"):format(data.openQuests))
+                .. (((data.openXP or 0) > 0) and (" (" .. GP.QuestXP.Text(data.openXP) .. ")") or "")
+        end
         if data.togo then
             parts[#parts + 1] = (L("%d runs"):format(data.togo.runs or 0))
             if (data.wishCount or 0) > 0 then parts[#parts + 1] = (L("%d wishlist items"):format(data.wishCount)) end
@@ -2332,7 +2407,7 @@ function GP.Toggle()
     if frame:IsShown() then frame:Hide() else GP.Open() end
 end
 
-frame:SetScript("OnHide", function() U.profileMenu:Hide(); U.slotMenu:Hide() end)
+frame:SetScript("OnHide", function() U.profileMenu:Hide(); U.slotMenu:Hide(); GP.chainOpen = {} end)
 frame:SetScript("OnSizeChanged", function() if GP.ScheduleRefresh then GP.ScheduleRefresh() end end)
 -- Saved position and size.
 function GP.RestoreWindow()

@@ -187,6 +187,7 @@ local function initialize()
     if saved.questsGrey == nil then saved.questsGrey = false end
     saved.togo = type(saved.togo) == "table" and saved.togo or {}
     if saved.togoAutoRemove == nil then saved.togoAutoRemove = false end
+    if saved.mapReveal == nil then saved.mapReveal = true end
     GearPilotProSettings = saved
     GP.settings = saved
 end
@@ -335,4 +336,12 @@ end)
 
 SLASH_GEARPILOTPRO1 = "/gpp"
 SLASH_GEARPILOTPRO2 = "/gearpilotpro"
-SlashCmdList.GEARPILOTPRO = function() if GP.Toggle then GP.Toggle() end end
+SlashCmdList.GEARPILOTPRO = function(text)
+    local command, rest = (text or ""):match("^%s*(%S*)%s*(.-)%s*$")
+    command = (command or ""):lower()
+    if (command == "ep" or command == "xp") and tonumber(rest) then
+        GP.QuestXP.Test(tonumber(rest))
+        return
+    end
+    if GP.Toggle then GP.Toggle() end
+end
