@@ -40,9 +40,34 @@ function GP.Player()
         raceBit = GP.Sources.RaceBit(raceID) }
 end
 
+-- Dungeon catalog for the player's rows (Sources.Catalog), cached with the rows.
+function GP.Catalog()
+    local player = GP.Player()
+    local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance, player.raceBit)
+    if not rows then return {}, {} end
+    if GP.catalogRows ~= rows then
+        GP.catalogList, GP.catalogByName = GP.Sources.Catalog(ForeverDB, GP.DungeonData, rows)
+        GP.catalogRows = rows
+    end
+    return GP.catalogList, GP.catalogByName
+end
+-- Range of your dungeons: from dungeonBelow levels below to dungeonAbove levels above your level.
+function GP.DungeonRange()
+    local s = GP.settings
+    return P.Range(GP.Player().level, s.dungeonBelow, s.dungeonAbove)
+end
+-- A dungeon is in your range when its level range overlaps it.
+function GP.DungeonInRange(d, low, high)
+    if not d then return false end
+    if not low then low, high = GP.DungeonRange() end
+    return (d.low or 1) <= high and (d.high or d.low or 1) >= low
+end
+
 -- Candidates of one source ("Bags", "Quests", "Dungeons") inside the level window.
--- Returns entries, loading, state; state "missing" when ForeverDB is not installed.
-function GP.ReadCandidates(source, low, high)
+-- Dungeons: low/high is the dungeon range; a drop counts when its dungeon overlaps the range (options.all: every
+-- dungeon) and you can wear it by the top of the range. Returns entries, loading, state; state "missing" when
+-- ForeverDB is not installed.
+function GP.ReadCandidates(source, low, high, options)
     local entries, loading = {}, false
     local player = GP.Player()
     local function add(entry, ref)
@@ -98,7 +123,12 @@ function GP.ReadCandidates(source, low, high)
         local info = db.item[row.itemID]
         local required = info and info[3] or 0
         if wanted and row.exclusive and GP.Sources.Excluded(row) then wanted = false end
-        if wanted and row.source == source and row.level >= low and row.level <= high and required <= high
+        local inWindow = row.level >= low and row.level <= high
+        if source == "Dungeons" and row.source == source then
+            local _, byName = GP.Catalog()
+            inWindow = (options and options.all) or GP.DungeonInRange(byName[row.name], low, high)
+        end
+        if wanted and row.source == source and inWindow and required <= high
             and (source ~= "Quests" or not GP.Sources.QuestDone(row.sourceID)) then
             add({
                 source = source, sourceID = row.sourceID, name = row.name, level = row.level, row = row,
@@ -150,6 +180,13 @@ local function initialize()
     if type(saved.custom) == "table" then P.SetCustom(saved.custom) end
     saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"
     saved.dungeonQuests = (saved.dungeonQuests == "hide" or saved.dungeonQuests == "only") and saved.dungeonQuests or "show"
+    -- 1.0.2: own dungeon range, quests until grey, dungeons to go.
+    saved.dungeonBelow = bounded(saved.dungeonBelow, 5, 0, 15)
+    saved.dungeonAbove = bounded(saved.dungeonAbove, 3, 0, 15)
+    saved.dungeonShow = saved.dungeonShow == "range" and "range" or "all"
+    if saved.questsGrey == nil then saved.questsGrey = false end
+    saved.togo = type(saved.togo) == "table" and saved.togo or {}
+    if saved.togoAutoRemove == nil then saved.togoAutoRemove = false end
     GearPilotProSettings = saved
     GP.settings = saved
 end

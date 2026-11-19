@@ -4,7 +4,7 @@ local _, GP = ...
 GP.DungeonData = {
   source = "AllTheThings Snapshot 2026-11-19",
   instances = {
-    { id = 63, name = "Deadmines", level = 10, area = 1581, entrance = { 1436, 42.2, 82.6 }, bosses = {
+    { id = 63, name = "Deadmines", level = 10, area = 1581, entrance = { 1436, 42.2, 82.6 }, quests = { 166, 167, 168, 214, 373, 2040, 92753, 92819 }, bosses = {
       { name = "Brainwashed Noble", npcs = { 596 }, items = { 3902, 5967 }, rare = true },
       { name = "Foreman Thistlenettle", npcs = { 626 }, items = { 1875, 2167, 2166, 2168 }, rare = true },
       { name = "Marisa du'Paige", npcs = { 599 }, items = { 3019, 4660 }, rare = true },
@@ -18,7 +18,7 @@ GP.DungeonData = {
       { name = "Edwin VanCleef <Defias Kingpin>", npcs = { 639 }, items = { 2874, 3637, 5191, 5193, 5202, 10399 } },
       { name = "Cookie <The Ship's Cook>", npcs = { 645 }, items = { 8490, 5198, 5197, 273298, 273102 } },
     } },
-    { id = 64, name = "Shadowfang Keep", level = 14, area = 209, entrance = { 1421, 36.6, 65.6 }, bosses = {
+    { id = 64, name = "Shadowfang Keep", level = 14, area = 209, entrance = { 1421, 36.6, 65.6 }, quests = { 1013, 1014, 1098, 1740 }, bosses = {
       { name = "Rethilgore <The Cell Keeper>", npcs = { 3914 }, items = { 273456, 5254, 273457 } },
       { name = "Fel Steed/Shadow Charger", npcs = { 3864 }, items = { 6341, 932 } },
       { name = "Razorclaw the Butcher", npcs = { 3886 }, items = { 273096, 1292, 6633, 6226 } },
@@ -31,13 +31,13 @@ GP.DungeonData = {
       { name = "Wolf Master Nandos", npcs = { 3927 }, items = { 3748, 6314, 273647 } },
       { name = "Archmage Arugal", npcs = { 4275 }, items = { 5442, 6220, 6324, 6392 } },
     } },
-    { id = 226, name = "Ragefire Chasm", level = 13, area = 2437, entrance = { 1454, 50.6, 51.6 }, bosses = {
+    { id = 226, name = "Ragefire Chasm", level = 13, area = 2437, entrance = { 1454, 50.6, 51.6 }, quests = { 5722, 5723, 5724, 5725, 5728, 5729, 5730, 5761 }, bosses = {
       { name = "Oggleflint <Ragefire Chieftain>", npcs = { 11517 }, items = { 272999, 272998, 272996 } },
       { name = "Taragaman the Hungerer", npcs = { 11520 }, items = { 14540, 14145, 14149, 14148 } },
       { name = "Jergosh the Invoker", npcs = { 11518 }, items = { 14151, 14150, 14147 } },
       { name = "Bazzalan", npcs = { 11519 }, items = { 273007, 273005, 273003 } },
     } },
-    { id = 227, name = "Blackfathom Deeps", level = 19, area = 719, entrance = { 1440, 14, 11.1 }, bosses = {
+    { id = 227, name = "Blackfathom Deeps", level = 19, area = 719, entrance = { 1440, 14, 11.1 }, quests = { 908, 971, 1198, 1199, 1200, 1275, 3765, 6561, 6562, 6563, 6564, 6565, 6921, 6922 }, bosses = {
       { name = "Ghamoo-ra", npcs = { 4887 }, items = { 6908, 273839, 6907 } },
       { name = "Lady Sarevess", npcs = { 4831 }, items = { 252798, 11121, 888, 3078 } },
       { name = "Baron Aquanis", npcs = { 12876 }, items = { 16782 } },
@@ -47,7 +47,7 @@ GP.DungeonData = {
       { name = "Twilight Lord Kelris", npcs = { 4832 }, items = { 6903, 1155, 273846 } },
       { name = "Aku'mai", npcs = { 4829 }, items = { 6910, 6911, 6909 } },
     } },
-    { id = 228, name = "Blackrock Depths", level = 42, area = 1584, entrance = { 35, 39.06, 18.12 }, bosses = {
+    { id = 228, name = "Blackrock Depths", level = 42, area = 1584, entrance = { 35, 39.06, 18.12 }, quests = { 3701, 3702, 3801, 3802, 3906, 3907, 3981, 3982, 4001, 4002, 4003, 4004, 4022, 4023, 4024, 4061, 4062, 4063, 4081, 4082, 4083, 4121, 4122, 4123, 4126, 4128, 4132, 4133, 4134, 4136, 4182, 4183, 4184, 4185, 4186, 4201, 4223, 4224, 4241, 4242, 4262, 4263, 4264, 4282, 4286, 4295, 4322, 4324, 4341, 4342, 4361, 4362, 4363, 6402, 6403, 6501, 6642, 6643, 6644, 6645, 6646, 7201, 97197 }, bosses = {
       { name = "Plugger Spazzring", npcs = { 9499 }, items = { 11325 } },
       { name = "High Interrogator Gerstahn", npcs = { 9018 }, items = { 11140, 11626, 11625, 11624 } },
       { name = "Lord Roccor", npcs = { 9025 }, items = { 11813, 11632, 11630, 11631 } },
@@ -73,7 +73,7 @@ GP.DungeonData = {
       { name = "Princess Moira Bronzebeard <Princess of Ironforge> / Thaurissan High Priest", npcs = { 8929 }, items = { 12557, 12554, 12556, 12553 } },
       { name = "Emperor Dagran Thaurissan", npcs = { 9019 }, items = { 11931, 11934, 11932, 12556, 11933, 11684, 16724, 11924, 12553, 11928, 11930, 12033 } },
     } },
-    { id = 229, name = "Blackrock Spire", level = 50, area = 1583, bosses = {
+    { id = 229, name = "Blackrock Spire", level = 50, area = 1583, quests = { 4701, 4724, 4729, 4734, 4735, 4742, 4743, 4764, 4765, 4766, 4768, 4769, 4788, 4809, 4862, 4866, 4867, 4903, 4907, 4941, 4974, 4981, 4983, 5002, 5047, 5063, 5065, 5067, 5068, 5081, 5089, 5102, 5103, 5124, 5126, 5127, 5160, 5161, 5162, 5164, 5166, 5167, 6502, 6566, 6567, 6568, 6569, 6570, 6582, 6583, 6584, 6585, 6601, 6602, 7761, 8181, 8182, 98325 }, bosses = {
       { name = "Scarshield Warlock", npcs = { 9257 }, items = { 9214, 13181, 13182 } },
       { name = "Spirestone Battle Lord (Rare)", npcs = { 9218 }, items = { 13285, 13284 }, rare = true },
       { name = "Spirestone Butcher (Rare)", npcs = { 9219 }, items = { 13286, 12608 }, rare = true },
@@ -101,7 +101,7 @@ GP.DungeonData = {
       { name = "Lord Valthalak", npcs = { 16042 }, items = { 22336, 22335, 22302, 22340, 22337, 22343, 22342, 22339 } },
       { name = "General Drakkisath", npcs = { 10363 }, items = { 16663, 15730, 13519, 12592, 12602, 22253, 22267, 13141, 16674, 16730, 16690, 16700, 16726, 16688, 16721, 16666, 16706, 22269, 13142, 13098, 22268 } },
     } },
-    { id = 230, name = "Dire Maul", level = 44, bosses = {
+    { id = 230, name = "Dire Maul", level = 44, quests = { 1193, 5518, 5519, 5525, 5526, 5527, 5528, 7429, 7441, 7461, 7463, 7483, 7484, 7485, 7488, 7489, 7492, 7494, 7498, 7499, 7500, 7501, 7502, 7503, 7504, 7505, 7506, 7631, 7703, 7877, 27118 }, bosses = {
       { name = "Pusillin", npcs = { 14354 }, items = { 18249, 18267, 18261, 18255 } },
       { name = "Pimgib", npcs = { 14349 }, items = { 18354 } },
       { name = "Lethtendris", npcs = { 14327 }, items = { 18426, 18302, 18325, 18301, 18311 } },
@@ -125,7 +125,7 @@ GP.DungeonData = {
       { name = "Falrin Treeshaper <House of Shen'dralar>", npcs = { 16032 }, items = { 21986 } },
       { name = "Prince Tortheldrin", npcs = { 11486 }, items = { 18336, 18375, 18373, 18392, 18380, 18395, 18382, 18396, 18378, 18388, 18376 } },
     } },
-    { id = 231, name = "Gnomeregan", level = 19, area = 133, entrance = { 1426, 18.4, 38.6 }, bosses = {
+    { id = 231, name = "Gnomeregan", level = 19, area = 133, entrance = { 1426, 18.4, 38.6 }, quests = { 2841, 2842, 2843, 2904, 2922, 2923, 2924, 2925, 2926, 2927, 2928, 2929, 2930, 2931, 2945, 2947, 2948, 2949, 2950, 2962 }, bosses = {
       { name = "Techbot", npcs = { 6231 }, items = { 9277, 9444 } },
       { name = "Grubbis", npcs = { 7361 }, items = { 9445, 274042, 274043 } },
       { name = "Viscous Fallout", npcs = { 7079 }, items = { 9452, 9453, 9454 } },
@@ -134,7 +134,7 @@ GP.DungeonData = {
       { name = "Dark Iron Ambassador", npcs = { 6228 }, items = { 5108, 9456, 9457, 9455 }, rare = true },
       { name = "Mekgineer Thermaplugg", npcs = { 7800 }, items = { 9459, 9458, 9492, 9461, 4415, 4413, 6716, 4411, 6672, 7742, 7560, 7561, 4416, 7192, 4417, 4408, 4412, 4414, 4410, 4409 } },
     } },
-    { id = 232, name = "Maraudon", level = 41, area = 2100, entrance = { 1443, 35.7, 55.5 }, bosses = {
+    { id = 232, name = "Maraudon", level = 41, area = 2100, entrance = { 1443, 35.7, 55.5 }, quests = { 7028, 7044, 7046, 7066, 7067, 93404, 96776 }, bosses = {
       { name = "Noxxion", npcs = { 13282 }, items = { 17702, 17745, 17746, 17744 } },
       { name = "Razorlash", npcs = { 12258 }, items = { 17749, 17750, 17751, 17748 } },
       { name = "Lord Vyletongue", npcs = { 12236 }, items = { 17703, 17752, 17755, 17754 } },
@@ -145,7 +145,7 @@ GP.DungeonData = {
       { name = "Rotgrip", npcs = { 13596 }, items = { 17730, 17732, 17728 } },
       { name = "Princess Theradras", npcs = { 12201 }, items = { 17780, 17710, 17766, 17715, 17707, 17714, 17711, 17713 } },
     } },
-    { id = 233, name = "Razorfen Downs", level = 35, area = 722, entrance = { 1413, 50, 92 }, bosses = {
+    { id = 233, name = "Razorfen Downs", level = 35, area = 722, entrance = { 1413, 50, 92 }, quests = { 3341, 3523, 3525, 3636, 6521, 6626, 93604, 96773, 97196 }, bosses = {
       { name = "Ambassador Bloodrage", npcs = { 7895 }, items = { 286639 }, rare = true },
       { name = "Tuten'kash", npcs = { 7355 }, items = { 10776, 10775, 10777 } },
       { name = "Plaguemaw the Rotting", npcs = { 7356 }, items = { 10766, 10760, 274380 } },
@@ -154,7 +154,7 @@ GP.DungeonData = {
       { name = "Ragglesnout", npcs = { 7354 }, items = { 10758, 10767, 10768 }, rare = true },
       { name = "Amnennar the Coldbringer", npcs = { 7358 }, items = { 10420, 10761, 10763, 10764, 10762, 10765, 274381 } },
     } },
-    { id = 234, name = "Razorfen Kraul", level = 17, area = 491, entrance = { 1413, 40.94, 94.55 }, bosses = {
+    { id = 234, name = "Razorfen Kraul", level = 17, area = 491, entrance = { 1413, 40.94, 94.55 }, quests = { 1100, 1101, 1102, 1109, 1142, 1144, 1221, 6522 }, bosses = {
       { name = "Roogug", npcs = { 6168 }, items = { 274155, 274152, 6841, 274149 } },
       { name = "Aggem Thorncurse <Death's Head Prophet>", npcs = { 4424 }, items = { 274158, 6681, 274159 } },
       { name = "Death Speaker Jargba <Death's Head Captain>", npcs = { 4428 }, items = { 2816, 6685, 6682 } },
@@ -165,7 +165,7 @@ GP.DungeonData = {
       { name = "Agathelos the Raging", npcs = { 4422 }, items = { 6691, 274160, 6690 } },
       { name = "Charlga Razorflank", npcs = { 4421 }, items = { 5793, 5792, 17008, 6692, 6694, 6693 } },
     } },
-    { id = 236, name = "Stratholme", level = 48, area = 2017, bosses = {
+    { id = 236, name = "Stratholme", level = 48, area = 2017, quests = { 5122, 5125, 5212, 5213, 5214, 5243, 5251, 5262, 5263, 5264, 5265, 5281, 5282, 5742, 5781, 5845, 5846, 5848, 5861, 5862, 5944, 6163 }, bosses = {
       { name = "Skul", npcs = { 10393 }, items = { 13396, 13394, 13395 }, rare = true },
       { name = "Fras Siabi / Ezra Grimm", npcs = { 11058 }, items = { 13172 } },
       { name = "Stratholme Courier", npcs = { 11082 }, items = { 13303, 13305, 13304, 13307, 13306, 13302 } },
@@ -189,7 +189,7 @@ GP.DungeonData = {
       { name = "Ramstein the Gorger", npcs = { 10439 }, items = { 15880, 13372, 13375, 18723, 13374, 16737, 13373, 13515 } },
       { name = "Baron Rivendare", npcs = { 10440 }, items = { 13251, 13335, 16678, 16694, 16699, 16668, 16732, 16728, 16687, 16709, 16719, 13505, 13368, 22408, 13349, 13361, 22411, 22412, 13340, 13346, 22409, 13344, 22410, 13345 } },
     } },
-    { id = 237, name = "The Temple of Atal'hakkar", level = 45, entrance = { 1435, 69.2, 54.8 }, bosses = {
+    { id = 237, name = "The Temple of Atal'hakkar", level = 45, entrance = { 1435, 69.2, 54.8 }, quests = { 1445, 1446, 1475, 3373, 3374, 3446, 3447, 3512, 3528, 4143, 4146, 8232, 8236, 8253, 8257, 8413, 8418, 8422, 8425, 9053 }, bosses = {
       { name = "Spawn of Hakkar", npcs = { 5708 }, items = { 10801, 10802 } },
       { name = "Atal'alarion", npcs = { 8580 }, items = { 22444, 10799, 10800, 10798, 252871 } },
       { name = "Avatar of Hakkar", npcs = { 8443, 8440 }, items = { 10663, 10844, 10838, 10843, 12462, 10845, 10842, 10846 } },
@@ -198,7 +198,7 @@ GP.DungeonData = {
       { name = "Wardens of the Dream", npcs = { 5721, 5722, 5719, 5720 }, items = { 12463, 12243, 10797, 10796, 12465, 12464, 12466, 10795 } },
       { name = "Shade of Erankikus", npcs = { 5709 }, items = { 10454, 10828, 10847, 10837, 10836, 10835, 10833, 10829 } },
     } },
-    { id = 238, name = "The Stockade", level = 15, area = 717, entrance = { 1453, 51.6, 69.4 }, bosses = {
+    { id = 238, name = "The Stockade", level = 15, area = 717, entrance = { 1453, 51.6, 69.4 }, quests = { 377, 378, 386, 387, 388, 389, 391 }, bosses = {
       { name = "Bruegal Ironknuckle", npcs = { 1720 }, items = { 2942, 3228, 2941 }, rare = true },
       { name = "Kam Deepfury", npcs = { 1666 }, items = { 3640, 273808, 273807, 2280 } },
       { name = "Dextren Ward", npcs = { 1663 }, items = { 3628, 273819, 273817, 273820 } },
@@ -206,7 +206,7 @@ GP.DungeonData = {
       { name = "Targorr the Dread", npcs = { 1696 }, items = { 3630, 273805, 273806, 273804 } },
       { name = "Bazil Thredd", npcs = { 1716 }, items = { 2926, 273827, 273829, 273824, 273825 } },
     } },
-    { id = 239, name = "Uldaman", level = 35, area = 1337, bosses = {
+    { id = 239, name = "Uldaman", level = 35, area = 1337, quests = { 1139, 1956, 2198, 2199, 2200, 2201, 2204, 2240, 2278, 2279, 2280, 2283, 2284, 2318, 2338, 2339, 2340, 2341, 2361, 2398, 2439, 2440, 2946, 2954, 2963, 2964, 2965, 2966, 2967, 2968, 2977, 3375 }, bosses = {
       { name = "Digmaster Shovelphlange", npcs = { 7057 }, items = { 9378, 9375, 9382 } },
       { name = "Baelog", npcs = { 6906 }, items = { 9399, 9401, 9400 } },
       { name = "Eric \"The Swift\"", npcs = { 6907 }, items = { 9394, 9398, 2459 } },
@@ -220,7 +220,7 @@ GP.DungeonData = {
       { name = "Grimlok", npcs = { 4854 }, items = { 7670, 9416, 9415, 9414 } },
       { name = "Archaedas", npcs = { 2748 }, items = { 7672, 9418, 9413, 11118, 274432 } },
     } },
-    { id = 240, name = "Wailing Caverns", level = 10, area = 718, bosses = {
+    { id = 240, name = "Wailing Caverns", level = 10, area = 718, quests = { 914, 962, 1486, 1487, 1489, 1490, 1491, 3369, 3370, 6981 }, bosses = {
       { name = "Kalldan Felmoon <Specialist Leatherworking Supplies>", npcs = { 5783 }, items = { 6474, 6475 } },
       { name = "Lady Anacondra <Fanglord>", npcs = { 3671 }, items = { 9739, 5404, 10412, 273088, 6446, 273098 } },
       { name = "Kresh", npcs = { 3653 }, items = { 13245, 6447, 273084 } },
@@ -232,7 +232,7 @@ GP.DungeonData = {
       { name = "Verdan the Everliving", npcs = { 5775 }, items = { 6631, 6630, 6629 } },
       { name = "Mutanus the Devourer", npcs = { 3654 }, items = { 10441, 6461, 6627, 6463 } },
     } },
-    { id = 241, name = "Zul'Farrak", level = 39, area = 978, entrance = { 1446, 39, 19 }, bosses = {
+    { id = 241, name = "Zul'Farrak", level = 39, area = 978, entrance = { 1446, 39, 19 }, quests = { 2768, 2769, 2770, 2846, 2861, 2865, 2936, 2991, 3042, 3527, 4787, 96770, 96775 }, bosses = {
       { name = "Sandarr Dunereaver", npcs = { 10080 }, items = { 9512, 9511, 6440, 9480, 9483, 5616, 862, 9484, 9481, 2040, 9482, 274659, 274660 }, rare = true },
       { name = "Zerillis", npcs = { 10082 }, items = { 12470, 274658 }, rare = true },
       { name = "Theka the Martyr", npcs = { 7272 }, items = { 10660, 274638, 274639, 274641 } },
@@ -247,7 +247,7 @@ GP.DungeonData = {
       { name = "Ruuzlu", npcs = { 7797 }, items = { 274654, 274655 } },
       { name = "Chief Ukorz Sandscalp", npcs = { 7267 }, items = { 11086, 9478, 9477, 9479, 9476 } },
     } },
-    { id = 246, name = "Scholomance", level = 55, area = 2057, entrance = { 1422, 69.07, 72.96 }, bosses = {
+    { id = 246, name = "Scholomance", level = 55, area = 2057, entrance = { 1422, 69.07, 72.96 }, quests = { 838, 4771, 5342, 5344, 5382, 5384, 5461, 5462, 5463, 5464, 5465, 5466, 5515, 5522, 5529, 5531, 5533, 5582, 7647, 7666, 7667, 7668, 7669, 8258, 8259 }, bosses = {
       { name = "Blood Steward of Kirtonos", npcs = { 14861 }, items = { 13523 } },
       { name = "Kirtonos the Herald", npcs = { 10506 }, items = { 14024, 13983, 13960, 13955, 13969, 13957, 13956, 16734, 13967 } },
       { name = "Jandice Barov", npcs = { 10503 }, items = { 13523, 13725, 14541, 22394, 18689, 16701, 14548, 14543, 14545, 18690 } },
@@ -264,7 +264,7 @@ GP.DungeonData = {
       { name = "Lord Alexei Barov", npcs = { 10504 }, items = { 16722 } },
       { name = "Darkmaster Gandling", npcs = { 1853 }, items = { 14514, 13501, 13937, 13938, 13953, 13964, 16677, 16667, 16693, 16698, 16731, 16727, 16686, 16707, 16720, 13944, 13951, 13950, 13398, 22433, 19276 } },
     } },
-    { id = 316, name = "Scarlet Monastery", level = 25, area = 796, entrance = { 1420, 82.6, 32.4 }, bosses = {
+    { id = 316, name = "Scarlet Monastery", level = 25, area = 796, entrance = { 1420, 82.6, 32.4 }, quests = { 1048, 1049, 1050, 1051, 1053, 1113, 1160, 1951 }, bosses = {
       { name = "Fallen Champion", npcs = { 6488 }, items = { 7690, 7691, 7689 } },
       { name = "Azshir the Sleepless", npcs = { 6490 }, items = { 7709, 7731, 7708 } },
       { name = "Ironspine", npcs = { 6489 }, items = { 7687, 7688, 7686 } },
@@ -278,10 +278,10 @@ GP.DungeonData = {
       { name = "Scarlet Commander Mograine", npcs = { 3976 }, items = { 7726, 7724, 7723, 10330 } },
       { name = "High Inquisitor Whitemane", npcs = { 3977 }, items = { 7721, 7722, 7720 } },
     } },
-    { id = 760, name = "Onyxia's Lair", level = 60, raid = true, area = 2159, entrance = { 1445, 52.3, 76.2 }, bosses = {
+    { id = 760, name = "Onyxia's Lair", level = 60, raid = true, area = 2159, entrance = { 1445, 52.3, 76.2 }, quests = { 7490, 7491, 7493, 7495, 7496, 7497, 7507, 7508, 7509, 7634, 7635, 7636 }, bosses = {
       { name = "Onyxia", npcs = { 10184 }, items = { 18423, 18422, 18705, 17966 } },
     } },
-    { id = 2959, name = "City of Dalaran", area = 16544, entrance = { 1416, 9.1, 60 }, bosses = {
+    { id = 2959, name = "City of Dalaran", area = 16544, entrance = { 1416, 9.1, 60 }, quests = { 92432, 92434, 92456, 92457, 92458, 92459, 92489, 93680, 93689, 96984, 96986, 96987, 96988, 97287 }, bosses = {
       { name = "Atrexis the Grave Knight", npcs = { 247126 }, items = { 273033, 273036, 273032 } },
       { name = "Lyn the Ignored", npcs = { 247032 }, items = { 273053, 273055, 273054 } },
       { name = "Arcane Anomaly", npcs = { 245999 }, items = { 273034, 273035, 273031 } },
@@ -292,7 +292,7 @@ GP.DungeonData = {
       { name = "Unstable Sentinel", npcs = { 246017 }, items = { 273046, 273048, 273047, 273099 } },
       { name = "Shade of the Archmage", npcs = { 246020 }, items = { 273052, 273051, 273049, 273103 } },
     } },
-    { id = 2970, name = "The Drowned City", level = 35, area = 16550, entrance = { 1434, 21.5, 27.8 }, bosses = {
+    { id = 2970, name = "The Drowned City", level = 35, area = 16550, entrance = { 1434, 21.5, 27.8 }, quests = { 95775, 95776, 95787, 95788, 95789, 95791, 95798, 95799, 96078, 96774, 97130 }, bosses = {
       { name = "Zul'Alai", npcs = { 258905 }, items = { 274600, 274598, 274599 } },
       { name = "Var'Taka", npcs = { 258924 }, items = { 274602, 274601, 274613 } },
       { name = "Captain Dreadrise", npcs = { 260042 }, items = { 274605, 274603, 274604 } },
@@ -302,7 +302,7 @@ GP.DungeonData = {
       { name = "Deathless Marrow", npcs = { 260202 }, items = { 274606, 274614, 274607 } },
       { name = "Umbra", npcs = { 264172 }, items = { 286662, 286658 }, rare = true },
     } },
-    { id = 2974, name = "Blackmaw Hold", level = 55, area = 16554, bosses = {
+    { id = 2974, name = "Blackmaw Hold", level = 55, area = 16554, quests = { 92065, 92066, 92069, 92070, 92343, 92344, 92345, 97173, 97198, 97327 }, bosses = {
       { name = "Withermaw", npcs = { 247195 }, items = {  } },
       { name = "Impaan the Imprisoner", npcs = { 247206 }, items = {  } },
       { name = "Elder Shaman Bloodmane", npcs = { 247209 }, items = {  } },
@@ -311,20 +311,20 @@ GP.DungeonData = {
       { name = "Blackmaw Behemoth", npcs = { 247207 }, items = {  } },
       { name = "Unbound Spirit", npcs = { 247231 }, items = {  } },
     } },
-    { id = 2994, name = "Alcaz Prison", level = 48, area = 16620, bosses = {
+    { id = 2994, name = "Alcaz Prison", level = 48, area = 16620, quests = { 95194, 95196, 95198, 95262, 95263, 95264, 95309, 95454, 95483, 96332, 96334, 96335, 96337, 96369, 96376, 96377, 96379, 96381, 96772 }, bosses = {
       { name = "Overseer Wrex", npcs = { 255391 }, items = { 276732, 276733, 276734 } },
       { name = "Tidemistress Ca'zass", npcs = { 255997 }, items = { 276737, 276736, 276735 } },
       { name = "Katerina the Cleaner", npcs = { 257016 }, items = { 276739, 276738, 276740 } },
       { name = "The Questioner", npcs = { 256236 }, items = { 276741, 276743, 276742 } },
       { name = "Blazeroar", npcs = { 255702 }, items = { 276745, 276746, 276744 } },
     } },
-    { id = 2998, name = "Excavation Site: Wetlands", level = 23, area = 17732, entrance = { 1437, 48.1, 56.4 }, bosses = {
+    { id = 2998, name = "Excavation Site: Wetlands", level = 23, area = 17732, entrance = { 1437, 48.1, 56.4 }, quests = { 95646, 95647, 95663, 95664, 95682, 95697, 95772, 95795, 95809, 95810, 98815, 98823, 98824 }, bosses = {
       { name = "Saltspine", npcs = { 260322 }, items = { 273023, 273022, 273024 } },
       { name = "Shadetooth", npcs = { 260325 }, items = { 273025, 273026, 273027, 273106 } },
       { name = "Highland Horror", npcs = { 260808 }, items = { 270180 } },
       { name = "Relic Guardian", npcs = { 260326 }, items = { 273029, 273028, 273030, 273097, 270865, 270866 } },
     } },
-    { id = 2999, name = "Ruins of Lordaeron", level = 15, area = 16611, entrance = { 1420, 50, 50 }, bosses = {
+    { id = 2999, name = "Ruins of Lordaeron", level = 15, area = 16611, entrance = { 1420, 50, 50 }, quests = { 92401, 92415, 92421, 92422, 95161, 95189, 95195, 95204, 95216, 95250, 97288, 97289, 97290, 97291, 97292 }, bosses = {
       { name = "Lordaeron Captain", npcs = { 255699 }, items = { 6641, 6642 }, rare = true },
       { name = "Witherfang", npcs = { 250483 }, items = { 271201, 271203, 271202 } },
       { name = "The Baron", npcs = { 250660 }, items = { 271205, 271206, 271204, 280438 } },
@@ -333,7 +333,7 @@ GP.DungeonData = {
       { name = "Bjork", npcs = { 256097 }, items = { 271209, 271217, 271210 } },
       { name = "Rath'mael", npcs = { 250657 }, items = { 271215, 271213, 271214 } },
     } },
-    { id = 3001, name = "The Shaper's Terrace", level = 58, area = 16667, bosses = {
+    { id = 3001, name = "The Shaper's Terrace", level = 58, area = 16667, quests = { 95790, 95924, 95925, 95926, 95928, 97049 }, bosses = {
       { name = "Titanosaur", npcs = { 253201 }, items = {  } },
       { name = "Ravasaur Hunters", npcs = { 253214, 262688 }, items = {  } },
       { name = "Thunderhoof", npcs = { 261812 }, items = {  } },
@@ -345,7 +345,7 @@ GP.DungeonData = {
       { name = "Vitrix", npcs = { 272561 }, items = {  } },
       { name = "Nanaya", npcs = { 261809 }, items = {  } },
     } },
-    { id = 3039, name = "Krol'dok Stronghold", level = 40, area = 16842, bosses = {
+    { id = 3039, name = "Krol'dok Stronghold", level = 40, area = 16842, quests = { 94968, 94969, 94972, 94973, 94974, 94975, 94980, 94981, 94982, 94983, 94984, 94997, 94998, 96771 }, bosses = {
       { name = "Slavecrusher Grox", npcs = { 258966 }, items = { 273101, 274997, 274996, 274995 } },
       { name = "Twilight Commander Zarmok", npcs = { 258972 }, items = { 274999, 274998, 275000 } },
       { name = "Handler Ashka", npcs = { 259281 }, items = { 275001, 275002, 275003 } },
@@ -353,7 +353,7 @@ GP.DungeonData = {
       { name = "Overseer Mugg", npcs = { 258968 }, items = { 275009, 271721, 275008, 275007, 275010 } },
       { name = "Bossman Toof", npcs = { 264773 }, items = { 286428, 286429, 286430 } },
     } },
-    { id = 3065, name = "Hall of Thanes", level = 13, area = 16919, entrance = { 1455, 50, 50 }, bosses = {
+    { id = 3065, name = "Hall of Thanes", level = 13, area = 16919, entrance = { 1455, 50, 50 }, quests = { 96393, 96394, 96395, 96403, 98423 }, bosses = {
       { name = "Faldrim Anvilmar", npcs = { 261306 }, items = { 271096, 270227, 271097 } },
       { name = "Magmatus", npcs = { 261316 }, items = { 271095, 270231, 270230 } },
       { name = "Plunder", npcs = { 261311 }, items = { 271098, 270228, 270229 } },

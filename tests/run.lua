@@ -395,6 +395,26 @@ local byNpc, byMap = S.DropIndex(attDb, att, { 700, 701, 500 })
 assert(byNpc[900] and #byNpc[900] == 2 and byMap[2970] and #byMap[2970] == 2, "ATT loot in the drop hints")
 local classicNpc, classicMap = S.DropIndex(srcDb, nil, { 500 })
 assert(classicNpc[639][1].chance == 1500 and classicMap[36][1].boss == "Edwin VanCleef" and not classicMap[0])
+-- 1.0.2: dungeon catalog (levels from bosses and drops, quests from ATT and the dungeon zone) and windows.
+att.instances[1].quests = { 9001, 9002 }
+attDb.quest = { [9001] = { "Into the Deep", 36, 33 }, [9002] = { "Old Quest", 35, 30 }, [9003] = { "Zone quest", 37, 34 } }
+attDb.qx = { [9003] = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 16550 } }
+attDb.npc[900] = { "Zul'Alai", "", 34, 35, 1 }
+att.index = nil
+local catalogList, catalogByName = S.Catalog(attDb, att, S.Build(attDb, { class = "MAGE", faction = "Alliance", att = att }))
+local drowned = catalogByName["The Drowned City"]
+assert(drowned and drowned.mapID == 2970 and drowned.low == 35 and drowned.high == 35 and #drowned.quests == 3, "catalog entry")
+assert(#catalogList == 1 and #drowned.bosses == 2 and drowned.bosses[1].name == "Zul'Alai")
+local dq = S.DungeonQuest(attDb, 9001, { class = "MAGE", faction = "Alliance", raceBit = 1 })
+assert(dq and dq.title == "Into the Deep" and dq.level == 36)
+-- Windows: a dungeon drop at level 34 counts in a dungeon window 1..43 although your range is 39..42.
+local windowed = P.Recommend({ row("dungeon 34", "Dungeons", 34, item(330, { AGI = 20 }, 34)) }, {},
+    { level = 40, below = 1, above = 2, profile = melee, class = "ROGUE", windows = { Dungeons = { 1, 43 } } })
+assert(#windowed == 1, "dungeon window instead of your range")
+local outside = P.Recommend({ row("dungeon 34", "Dungeons", 34, item(330, { AGI = 20 }, 34)) }, {},
+    { level = 40, below = 1, above = 2, profile = melee, class = "ROGUE" })
+assert(#outside == 0)
+
 -- The generated file loads and covers the new Forever dungeons.
 local data = {}
 assert(loadfile("GearPilotPro/Data/Dungeons.lua"))("GearPilotPro", data)
