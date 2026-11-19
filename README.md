@@ -13,11 +13,15 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 ## Pages
 
 - **Best upgrades:** bags, quests and dungeons together, sorted by score gain.
-- **Quests / Dungeons / Bags:** one source each. Quests show level, quest giver, zone and prerequisites; dungeons show the boss and the drop chance.
+- **Quests / Dungeons / Bags:** one source each. Quests show level, quest giver, zone and the whole quest chain; dungeon quests are marked and can be hidden or shown alone; the quest list sorts by score, distance or zone. Dungeons show the boss and the drop chance.
+- **Waypoints:** to the quest giver or to every open step of the quest chain. With TomTom each step gets an arrow; without it the game's map waypoint moves on to the next step by itself.
+- **Item tooltip:** every item tooltip shows how much better or worse the item is than what you wear (can be turned off).
 - **Equipped gear:** every slot with its score and the values that count for your profile.
 - **Settings:** level range below and above your level, stat profile, minimum drop chance.
 
 ## Scoring
+
+The details show the value differences as bars, as in CraftPilot: their length is the effect on the score.
 
 Each item gets a score from its values and the weights of the chosen profile (melee strength, melee agility, ranged, caster, healer, tank). The game's item stats miss most caster, healer and hunter values on Forever (spell damage and healing, mana per 5 sec., crit and hit chance are "Equip:" lines), so GearPilot also reads the tooltip in English and German. Weapon DPS counts; ranged weapons and wands are scored separately. Two-hand weapons are compared against main and off hand together, quest choice rewards only list the best item of a quest, and class proficiencies (armor, shields, weapons, dual wield) are respected.
 

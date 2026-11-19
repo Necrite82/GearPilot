@@ -88,6 +88,23 @@ local de = {
     ["Limits"] = "Grenzen", ["Commands"] = "Befehle",
     ["Weights are provisional. Random proc effects and set bonuses are not scored. Items the game has not loaded yet appear a moment later."] =
         "Die Gewichtungen sind vorläufig. Zufallseffekte und Set-Boni werden nicht bewertet. Gegenstände, die das Spiel noch nicht geladen hat, erscheinen einen Moment später.",
+    -- Quests: filter, chain, waypoints
+    ["Sort"] = "Sortieren", ["Score"] = "Punkte", ["Distance"] = "Entfernung", ["Zone"] = "Gebiet",
+    ["Dungeon quests"] = "Dungeon-Quests", ["Show"] = "Zeigen", ["Hide"] = "Ausblenden", ["Only"] = "Nur diese",
+    ["Dungeon quest"] = "Dungeon-Quest", ["Dungeon quest: "] = "Dungeon-Quest: ", ["%d yd"] = "%d m",
+    ["Waypoint to quest giver"] = "Wegpunkt zum Questgeber", ["Whole chain (%d)"] = "Ganze Reihe (%d)",
+    ["Quest chain"] = "Questreihe", ["Waypoint: "] = "Wegpunkt: ",
+    ["No position known for this quest giver."] = "Für diesen Questgeber ist keine Position bekannt.",
+    ["Every quest of this chain is done or already in your quest log."] = "Alle Quests dieser Reihe sind erledigt oder schon im Questlog.",
+    ["%d waypoints set (TomTom)."] = "%d Wegpunkte gesetzt (TomTom).", ["Quest chain finished."] = "Questreihe abgeschlossen.",
+    ["Step %d of %d: "] = "Schritt %d von %d: ",
+    -- Tooltip
+    ["worn"] = "angelegt", ["free slot"] = "Platz frei", ["about equal"] = "etwa gleich",
+    ["%d %% better"] = "%d %% besser", ["%d %% worse"] = "%d %% schlechter",
+    ["not usable for your class"] = "für deine Klasse nicht nutzbar",
+    ["Item tooltip"] = "Item-Tooltip", ["On"] = "An", ["Off"] = "Aus",
+    ["Shows in every item tooltip how much better or worse the item is than what you wear."] =
+        "Zeigt in jedem Item-Tooltip, wie viel besser oder schlechter der Gegenstand ist als deine Ausrüstung.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

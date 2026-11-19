@@ -144,4 +144,34 @@ assert(byItem[102] and byItem[102].name == "The Deadmines" and byItem[102].chanc
 assert(not byItem[103], "0.5 % trash drop below the minimum chance")
 assert(byItem[104] and byItem[104].forever and byItem[104].chance == nil and byItem[104].level == 12,
     "Forever dungeon drop with unknown chance, level from the item")
+-- Quest chain and giver spots
+local chainDb = {
+    qx = { [3] = { 77, nil, { 2 } }, [2] = { 77, nil, { 9, 1 } }, [9] = { 178 }, [1] = { 77 }, [4] = { nil, nil, nil, { 1, 2 } } },
+    spw = { c5 = { { 0, -9000, 100 } } }, spm = { c6 = { [1429] = { 500, 250 } } },
+}
+local chain = S.Chain(chainDb, 3, "Alliance")
+assert(table.concat(chain, ",") == "1,2,3", "Horde prerequisite 9 skipped: " .. table.concat(chain, ","))
+assert(table.concat(S.Chain(chainDb, 4, "Alliance"), ",") == "1,2,4", "group prerequisites without duplicates")
+local spot = S.Spot(chainDb, "c5")
+assert(spot.world and spot.map == 0 and spot.x == -9000)
+spot = S.Spot(chainDb, "c6")
+assert(not spot.world and spot.map == 1429 and spot.x == 0.5 and spot.y == 0.25)
+assert(S.Spot(chainDb, "c7") == nil)
+
+-- Tooltip comparison
+local worn = { [5] = item(1, { AGI = 10 }) }
+local better = P.Compare(item(2, { AGI = 12 }), worn, melee, "ROGUE", 20)
+assert(better.usable and math.abs(better.percent - 20) < 1e-6)
+local worse = P.Compare(item(3, { AGI = 5 }), worn, melee, "ROGUE", 20)
+assert(worse.percent < 0)
+assert(P.Compare(item(4, { AGI = 5 }, 10, nil, 4, 4), worn, melee, "ROGUE", 20).usable == false, "plate for a rogue")
+assert(P.Compare(item(5, { AGI = 5 }, 10, "INVTYPE_BODY"), worn, melee, "ROGUE", 20) == nil, "shirts are not scored")
+assert(P.Compare(worn[5], worn, melee, "ROGUE", 20).worn)
+
+-- Forever replacement of a Classic quest with the same name
+local twinDb = { quest = { [286] = { "Return the Statuette" }, [98189] = { "Return the Statuette" }, [5] = { "Other" } },
+    qx = { [5] = { nil, nil, nil, { 286, 98189 } } } }
+assert(table.concat(S.Chain(twinDb, 5), ",") == "98189,5", "Classic twin dropped from the chain")
+assert(S.GiverName({ obj = { [9] = { "Wanted Poster" } } }, "o9") == "Wanted Poster")
+
 print("GearPilot checks passed")

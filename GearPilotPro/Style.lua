@@ -51,7 +51,8 @@ function Style.Surface(parent, shade)
 end
 
 function Style.Text(parent, font, x, y, width, value, align)
-    local t = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
+    local t = parent:CreateFontString(nil, "OVERLAY")
+    t:SetFontObject(Style.Font(font or "GameFontHighlightSmall"))
     t:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
     if width then t:SetWidth(width) end
     t:SetJustifyH(align or "LEFT")
@@ -59,18 +60,34 @@ function Style.Text(parent, font, x, y, width, value, align)
     return t
 end
 
+-- Fonts without the drop shadow: on filled buttons and chips the shadow makes the text look blurred.
+local fonts = {}
+function Style.Font(base, r, g, b)
+    local key = base .. (r and (":" .. r .. g .. b) or "")
+    if fonts[key] then return fonts[key] end
+    local font = CreateFont("GearPilotProFont" .. (#fonts + 1) .. base)
+    fonts[#fonts + 1] = font
+    font:CopyFontObject(_G[base] or GameFontHighlightSmall)
+    font:SetShadowOffset(0, 0)
+    font:SetShadowColor(0, 0, 0, 0)
+    if r then font:SetTextColor(r, g, b) end
+    fonts[key] = font
+    return font
+end
+
 function Style.Button(parent, width, height, caption, callback)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     Style.Round(b, true)
     b:SetBackdropColor(.114, .133, .165, 1)
-    local label = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local label = b:CreateFontString(nil, "OVERLAY")
+    label:SetFontObject(Style.Font("GameFontNormalSmall"))
     label:SetAllPoints(b)
     label:SetJustifyH("CENTER")
     label:SetWordWrap(false)
     b:SetFontString(label)
-    b:SetNormalFontObject("GameFontNormalSmall")
-    b:SetHighlightFontObject("GameFontHighlightSmall")
-    b:SetDisabledFontObject("GameFontDisableSmall")
+    b:SetNormalFontObject(Style.Font("GameFontNormalSmall"))
+    b:SetHighlightFontObject(Style.Font("GameFontHighlightSmall"))
+    b:SetDisabledFontObject(Style.Font("GameFontDisableSmall"))
     b:SetSize(width, height)
     b:SetText(caption or "")
     if callback then b:SetScript("OnClick", callback) end
@@ -80,13 +97,7 @@ end
 local primaryFont
 function Style.Primary(b)
     b:SetBackdropColor(.88, .69, .31, 1)
-    if not primaryFont then
-        primaryFont = CreateFont("GearPilotProPrimaryButtonFont")
-        primaryFont:CopyFontObject(GameFontHighlightSmall)
-        primaryFont:SetTextColor(.11, .08, .02)
-        primaryFont:SetShadowOffset(0, 0)
-        primaryFont:SetShadowColor(0, 0, 0, 0)
-    end
+    primaryFont = primaryFont or Style.Font("GameFontHighlightSmall", .11, .08, .02)
     b:SetNormalFontObject(primaryFont)
     b:SetHighlightFontObject(primaryFont)
     b:SetDisabledFontObject(primaryFont)
@@ -103,14 +114,11 @@ end
 function Style.Segment(b, on)
     if on then return Style.Primary(b) end
     b:SetBackdropColor(0, 0, 0, 0)
-    b:SetNormalFontObject("GameFontHighlightSmall")
-    b:SetHighlightFontObject("GameFontHighlightSmall")
+    local quiet = Style.Font("GameFontHighlightSmall", .80, .79, .75)
+    b:SetNormalFontObject(quiet)
+    b:SetHighlightFontObject(Style.Font("GameFontHighlightSmall"))
     local label = b:GetFontString()
-    if label then
-        label:SetTextColor(.80, .79, .75)
-        label:SetShadowOffset(1, -1)
-        label:SetShadowColor(0, 0, 0, 1)
-    end
+    if label then label:SetTextColor(.80, .79, .75) end
     return b
 end
 
@@ -135,7 +143,7 @@ function Style.Metrics(parent, values, x, y, width)
         p.value:SetWidth(w - 20)
         p.label:SetText(v.label)
         p.value:SetText(v.value)
-        p.value:SetFontObject(v.emphasis and "GameFontNormalLarge" or "GameFontNormal")
+        p.value:SetFontObject(Style.Font(v.emphasis and "GameFontNormalLarge" or "GameFontNormal"))
         local c = v.color or {1, .84, .46}
         p.value:SetTextColor(c[1], c[2], c[3])
         p:Show()

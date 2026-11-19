@@ -66,10 +66,14 @@ function GP.ReadCandidates(source, low, high)
     local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance)
     if not rows then return entries, false, "missing" end
     local db = ForeverDB
+    local dungeonQuests = GP.settings.dungeonQuests
     for _, row in ipairs(rows) do
+        local isDungeonQuest = row.dungeonQuest ~= nil
+        local wanted = row.source ~= "Quests" or dungeonQuests == "show"
+            or (dungeonQuests == "hide" and not isDungeonQuest) or (dungeonQuests == "only" and isDungeonQuest)
         local info = db.item[row.itemID]
         local required = info and info[3] or 0
-        if row.source == source and row.level >= low and row.level <= high and required <= high
+        if wanted and row.source == source and row.level >= low and row.level <= high and required <= high
             and (source ~= "Quests" or not GP.Sources.QuestDone(row.sourceID)) then
             add({
                 source = source, sourceID = row.sourceID, name = row.name, level = row.level, row = row,
@@ -95,6 +99,9 @@ local function initialize()
     saved.profile = P.Profile(saved.profile or P.defaultProfile[player.class]).key
     saved.minChance = chances[saved.minChance] and saved.minChance or 0.02
     saved.page = pages[saved.page] and saved.page or "upgrades"
+    if saved.tooltip == nil then saved.tooltip = true end
+    saved.questSort = (saved.questSort == "distance" or saved.questSort == "zone") and saved.questSort or "gain"
+    saved.dungeonQuests = (saved.dungeonQuests == "hide" or saved.dungeonQuests == "only") and saved.dungeonQuests or "show"
     GearPilotProSettings = saved
     GP.settings = saved
 end
