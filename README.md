@@ -1,23 +1,36 @@
 # GearPilot
 
-GearPilot is a standalone equipment upgrade planner for **World of Warcraft: Forever**. It compares equipment using role profiles and is designed to identify quest rewards and dungeon drops worth pursuing at your current level.
+GearPilot finds equipment upgrades for **World of Warcraft: Forever**: items in your bags, quest rewards and dungeon drops in your level range, best first. The window uses the same layout as CraftPilot: navigation on the left, list and details on the right. English and German.
 
-## Development build
+## Install (development build)
 
-Copy the inner `GearPilot` folder into `World of Warcraft/_forever_/Interface/AddOns/`, then open the window with `/gearpilot` or `/gp`. There are no addon dependencies. The interface is available in English and German.
+Copy the inner `GearPilotPro` folder into `World of Warcraft/_forever_/Interface/AddOns/` and open the window with `/gpp` or `/gearpilotpro`. If an older `GearPilot` folder from a previous development build is there, delete it.
 
-- **Find upgrades → Bags:** compare supported armor, necklaces, cloaks and rings in your bags with equipped items. Hover an item for its game tooltip and select a row for the point gain and the item it would replace.
-- **Equipped gear:** inspect your current equipment and empty slots.
-- **Quests and Dungeons:** the views and independently adjustable level offsets are ready for catalog data. This build ships an empty catalog until the ForeverDB response format and coverage have been checked.
+Quest rewards and dungeon drops need the **ForeverDB** addon ([CurseForge](https://www.curseforge.com/wow/addons/forever-db), [GitHub](https://github.com/foreverfraddons/forever-db)). The CurseForge app installs it together with GearPilot; for a manual install copy its `ForeverDB` folder next to `GearPilotPro`. Bag upgrades work without it.
 
-The preset role weights are provisional, and the score is a weighted sum of item stats. Weapons and trinkets are visible in equipped gear but excluded from recommendations. The comparison does not model effects, set bonuses or all restrictions on specific items. It conservatively avoids recommending duplicate ring IDs.
+The internal name is `GearPilotPro` (folder, saved settings, window names) so it never collides with the unrelated MoP Classic addon called GearPilot. The name shown in game stays GearPilot.
 
-## Catalog
+## Pages
 
-`GearPilot/Catalog.lua` defines the offline data boundary. Each row describes one item and one quest or dungeon source, with a recommendation level, optional faction, confirmed prerequisites and provenance. Source level drives the level window. Required equip level is evaluated separately against the game item data.
+- **Best upgrades:** bags, quests and dungeons together, sorted by score gain.
+- **Quests / Dungeons / Bags:** one source each. Quests show level, quest giver, zone and prerequisites; dungeons show the boss and the drop chance.
+- **Equipped gear:** every slot with its score and the values that count for your profile.
+- **Settings:** level range below and above your level, stat profile, minimum drop chance.
 
-The planned build step will fetch ForeverDB JSON outside WoW and produce the catalog. API credentials belong in the build environment. The repository and addon contain no credentials. Real data and visible provider attribution will be added together.
+## Scoring
+
+Each item gets a score from its values and the weights of the chosen profile (melee strength, melee agility, ranged, caster, healer, tank). The game's item stats miss most caster, healer and hunter values on Forever (spell damage and healing, mana per 5 sec., crit and hit chance are "Equip:" lines), so GearPilot also reads the tooltip in English and German. Weapon DPS counts; ranged weapons and wands are scored separately. Two-hand weapons are compared against main and off hand together, quest choice rewards only list the best item of a quest, and class proficiencies (armor, shields, weapons, dual wield) are respected.
+
+The weights are provisional. Random proc effects and set bonuses are not scored.
+
+## Data
+
+Quest rewards (`rew`, `qrw`), quest details (`quest`, `qx`, `qg`) and drops (`drop`, `npc`, `spw`, `ind`, `dng`) come from ForeverDB, which merges QuestieDB (Forever), VMaNGOS, cMaNGOS, pfQuest, AllTheThings and in-game recordings and is published under GPL-3.0. GearPilot loads it on demand the first time the window opens. Item values come from the game client.
 
 ## Checks
 
-Run `lua5.1 tests/planner.lua` or let GitHub Actions run the Lua syntax check and planner fixtures.
+`lua5.1 tests/run.lua` runs the tooltip parser, planner and source checks; GitHub Actions also runs a Lua syntax check.
+
+## License
+
+GPL-3.0.
