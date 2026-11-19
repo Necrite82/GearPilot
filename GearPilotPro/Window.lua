@@ -1673,7 +1673,8 @@ local function showRouteTask(data, profile, equipped)
     }, 12, detailY, width)
     detailY = detailY + 60
     local uiMap, x, y = QR.MapPoint(t)
-    local place = (t.kind == "objective" and t.label) or (t.kind == "accept" and ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef))
+    local objectiveName = t.kind == "objective" and ((t.item and GP.ItemData(t.item).name) or t.label)
+    local place = objectiveName or (t.kind == "accept" and ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef))
         or (ForeverDB and GP.Sources.GiverName(ForeverDB, q.enderRef))
     local zoneName = uiMap and GP.Sources.MapName(uiMap)
     if place then detailLine("GameFontHighlightSmall", L("Where: ") .. place .. (zoneName and (", " .. zoneName) or "")) end
@@ -1997,7 +1998,8 @@ local function routeData(player)
     local list = {}
     local zone = plan.zone
     if zone and zone.distance > 1500 then
-        local flight = ForeverDB and QR.FlightPoint(ForeverDB, zone.center, player.faction)
+        local _, _, node = QR.FlightPoint(ForeverDB, zone.center, player.faction)
+        local flight = QR.FlightName(node)
         list[#list + 1] = { key = "route:travel", travel = true, zone = zone, flight = flight }
     end
     for i, t in ipairs(plan.tasks) do

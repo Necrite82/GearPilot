@@ -40,9 +40,9 @@ QR.Spot = spot
 local function objectives(db, questID, near)
     local detail = db.qx and db.qx[questID] or {}
     local out = {}
-    local function add(ref, label)
+    local function add(ref, label, itemID)
         local p = spot(db, ref, near)
-        if p and #out < 4 then out[#out + 1] = { p = p, label = label } end
+        if p and #out < 4 then out[#out + 1] = { p = p, label = label, item = itemID } end
     end
     for _, npcID in ipairs(type(detail[8]) == "table" and detail[8] or {}) do
         local npc = db.npc and db.npc[npcID]
@@ -59,7 +59,7 @@ local function objectives(db, questID, near)
             if (drops[i + 1] or 0) > chance then npcID, chance = drops[i], drops[i + 1] or 0 end
         end
         local item = db.item and db.item[itemID]
-        if npcID then add("c" .. npcID, item and item[1]) end
+        if npcID then add("c" .. npcID, item and item[1], itemID) end
     end
     return out
 end
@@ -206,7 +206,7 @@ function QR.Order(quests, position, complete)
         end
         if not (complete and complete(q.id)) then
             for _, o in ipairs(q.objectives) do
-                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label }
+                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item }
             end
         end
         tasks[#tasks + 1] = { kind = "turnin", quest = q, p = q.ender }
@@ -283,7 +283,7 @@ function QR.FlightPoint(db, p, faction)
             if not best or d < bestDistance then best, bestDistance = node, d end
         end
     end
-    return best and best[1] or nil, bestDistance
+    return best and best[1] or nil, bestDistance, best
 end
 
 -- Game side ----------------------------------------------------------------------------------------------------
@@ -373,6 +373,11 @@ function QR.Current()
         end,
     }
     QR.plan = QR.Plan(db, ctx)
+    -- Zone names in your language.
+    for _, zone in ipairs(QR.plan.zones or {}) do
+        zone.name = QR.AreaName(zone.zone, zone.name)
+        for _, q in ipairs(zone.quests) do q.zoneName = zone.name end
+    end
     -- Ask the server for the experience of the planned quests (the plan refreshes when answers come).
     local ids = {}
     for _, q in ipairs(QR.plan.quests) do ids[#ids + 1] = q.id end
@@ -396,6 +401,33 @@ function QR.MapPoint(t)
     return GP.Sources.MapPoint({ world = true, map = t.p[1], x = t.p[2], y = t.p[3] })
 end
 
+-- Zone name in your language: the game's name of the area, ForeverDB's English one as fallback.
+function QR.AreaName(areaID, fallback)
+    if areaID and C_Map and C_Map.GetAreaInfo then
+        local ok, name = pcall(C_Map.GetAreaInfo, areaID)
+        if ok and type(name) == "string" and name ~= "" then return name end
+    end
+    return fallback
+end
+-- Flight point name in your language: the game's flight point at that place on the zone map.
+function QR.FlightName(node)
+    if not node then return nil end
+    local uiMap, x, y = GP.Sources.MapPoint({ world = true, map = node[2], x = node[3], y = node[4] })
+    if uiMap and x and C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap then
+        local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, uiMap)
+        local best, bestDistance
+        for _, info in ipairs(ok and type(nodes) == "table" and nodes or {}) do
+            local pos = info.position
+            if pos and info.name then
+                local d = (pos.x - x) ^ 2 + (pos.y - y) ^ 2
+                if not best or d < bestDistance then best, bestDistance = info.name, d end
+            end
+        end
+        if best and bestDistance < 0.0025 then return best end
+    end
+    return node[1]
+end
+
 -- Quest title in your language (the game's), ForeverDB's English one until the game has it.
 function QR.Title(q)
     return GP.Sources.QuestTitle(q.id, q.title) or q.title or ("#" .. q.id)
@@ -404,7 +436,15 @@ end
 -- Text of a task: "Accept", "Objective: Kobold Vermin", "Turn in".
 function QR.TaskText(t)
     if t.kind == "accept" then return L("Accept") end
-    if t.kind == "objective" then return L("Objective") .. (t.label and (": " .. t.label) or "") end
+    if t.kind == "objective" then
+        -- Quest items by the game's (local) name; creatures and objects as ForeverDB names them.
+        local label = t.label
+        if t.item and GP.ItemData then
+            local item = GP.ItemData(t.item)
+            if item and item.name then label = item.name end
+        end
+        return L("Objective") .. (label and (": " .. label) or "")
+    end
     return L("Turn in")
 end
 
