@@ -154,7 +154,11 @@ end
 local function checkTarget()
     if not (GP.settings and GP.settings.wishAlerts ~= false) then return end
     local guid = UnitGUID and UnitGUID("target")
-    local npcID = guid and tonumber(guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)"))
+    -- The 12.x client hands out some unit values as "secret" values (in combat, for some units): those cannot be
+    -- read by addons, so the hint is skipped then.
+    if guid == nil or (issecretvalue and issecretvalue(guid)) or (canaccessvalue and not canaccessvalue(guid)) then return end
+    local ok, id = pcall(string.match, guid, "^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)")
+    local npcID = ok and tonumber(id) or nil
     if not npcID or hinted["npc" .. npcID] then return end
     local byNpc = dropIndex()
     local found = byNpc[npcID]
@@ -190,7 +194,11 @@ for _, event in ipairs({ "PLAYER_LOGIN", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT
 end
 events:SetScript("OnEvent", function(_, event)
     if not GP.settings then return end
-    if event == "PLAYER_TARGET_CHANGED" then return checkTarget() end
+    -- Outside the click that changed the target, so nothing of GearPilot runs inside the game's own code.
+    if event == "PLAYER_TARGET_CHANGED" then
+        if C_Timer then C_Timer.After(0, checkTarget) else checkTarget() end
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         C_Timer.After(2, checkInstance)
         if event == "ZONE_CHANGED_NEW_AREA" then return end
