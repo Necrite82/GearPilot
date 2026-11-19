@@ -20,4 +20,4 @@ Das erste öffentliche Release: Ausrüstungs-Upgrades beim Leveln in WoW Forever
 
 Benötigt **ForeverDB**. Optional: Auctionator, TomTom, CraftPilot.
 
-Fragen, Ideen und Fehler: https://github.com/Necrite82/GearPilot/issues
+Fragen, Ideen und Fehler im Discord: https://discord.gg/DpsBkHtQS

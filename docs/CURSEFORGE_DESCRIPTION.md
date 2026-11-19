@@ -4,6 +4,8 @@
 
 GearPilot only reads and points the way – it never equips, buys or picks anything for you. German and English. Same look as **CraftPilot**, and both work together.
 
+**Community, questions & bug reports:** [Discord](https://discord.gg/DpsBkHtQS) – no GitHub account needed.
+
 ## Upgrades
 
 - **Best upgrades** from bags, quests and dungeons together, sorted by score gain – vendors, auction house and crafting can be added.
@@ -58,4 +60,4 @@ Quest, drop and vendor data: ForeverDB (GPL-3.0). Bosses and loot of the new For
 - Bewertung für Nahkampf, Fernkampf, Zauber, Heilung und Tank – automatisch nach Talenten, eigene Gewichte oder Pawn-Import.
 - **ForeverDB** wird benötigt (installiert die CurseForge-App mit), Auctionator, TomTom und CraftPilot sind optional.
 
-Öffnen mit `/gpp` oder über den Minimap-Button.
+Öffnen mit `/gpp` oder über den Minimap-Button. Fragen, Ideen und Fehler: [Discord](https://discord.gg/DpsBkHtQS).
