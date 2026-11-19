@@ -102,7 +102,8 @@ tooltip(U.rangeChip, function() return L("Level range") end, function()
 end)
 tooltip(U.dataChip, "ForeverDB", function()
     local build = GP.Sources.BuildDate()
-    if build then return { L("Quest rewards and dungeon drops from ForeverDB (GPL-3.0)."), L("Data from ") .. build } end
+    if build then return { L("Quest rewards and dungeon drops from ForeverDB (GPL-3.0)."), L("Data from ") .. build,
+        L("Bosses and loot of the new Forever dungeons: AllTheThings (MIT).") } end
     return { L("ForeverDB is not installed. Quests and dungeons need it; the CurseForge app installs it with GearPilot.") }
 end)
 
@@ -901,12 +902,8 @@ end
 local function recommend(sources, low, high, equipped, profile, player)
     local candidates, loading, states = collect(sources, low, high)
     local s = GP.settings
-    local all = P.Recommend(candidates, equipped, { level = player.level, below = s.below, above = s.above, profile = profile,
-        class = player.class })
-    local list = {}
-    for _, result in ipairs(all) do
-        if GP.SlotAllowed(result.slot) then list[#list + 1] = result end
-    end
+    local list = P.Recommend(candidates, equipped, { level = player.level, below = s.below, above = s.above, profile = profile,
+        class = player.class, slotAllowed = GP.SlotAllowed })
     return list, loading, states
 end
 
@@ -1274,6 +1271,9 @@ local function showDungeon(dungeon)
         { label = L("Dungeon quests"), value = tostring(#dungeon.quests), color = C.text },
     }, 12, detailY, width)
     detailY = detailY + 60
+    if (dungeon.estimated or 0) > 0 then
+        detailLine("GameFontDisableSmall", (L("%d drop chances are estimated from the boss's loot table (AllTheThings)."):format(dungeon.estimated)), C.muted)
+    end
     if dungeon.unknown > 0 then
         detailLine("GameFontDisableSmall", (L("%d drop chances are unknown and count as %d %%."):format(dungeon.unknown, P.UNKNOWN_CHANCE * 100)), C.muted)
     end
@@ -1287,9 +1287,8 @@ local function showDungeon(dungeon)
     for _, boss in ipairs(order) do
         section(boss)
         for _, result in ipairs(bosses[boss]) do
-            local chance = result.entry.row.chance
             itemLine(result.item, L(P.slotNames[result.slot] or "") .. " · " .. L("Drop chance") .. " "
-                .. (chance and ("%d %%"):format(math.floor(chance * 100 + .5)) or L("unknown")), signed(result.gain))
+                .. (GP.Sources.ChanceText(result.entry.row) or L("unknown")), signed(result.gain))
         end
     end
     if #dungeon.quests > 0 then
@@ -1450,6 +1449,10 @@ local function renderSettings()
     text("GameFontHighlightSmall", "Auctionator: " .. (GP.HasAuctionPrices() and L("prices available") or L("not installed")))
     text("GameFontHighlightSmall", "CraftPilot: " .. (GP.CraftPilot() and L("recipe catalog available") or L("not installed")))
     text("GameFontHighlightSmall", "TomTom: " .. ((type(TomTom) == "table") and L("arrows for every waypoint") or L("not installed (the game's map waypoint is used)")))
+
+    text("GameFontNormal", L("Data sources"), C.gold)
+    text("GameFontHighlightSmall", L("Quest rewards and dungeon drops come from ForeverDB (GPL-3.0, github.com/foreverfraddons/forever-db)."))
+    text("GameFontHighlightSmall", L("Bosses and loot of the new Forever dungeons come from AllTheThings (MIT, github.com/ATTWoWAddon/AllTheThings)."))
     U.pageContent:SetHeight(y + 16)
 end
 
@@ -1509,9 +1512,24 @@ function GP.BisList(s, low, high, profile, player, equipped)
     local target = s.bisTarget or "now"
     local maxLevel = target == "now" and high or 60
     local minLevel = target == "now" and math.max(1, player.level - 10) or 45
-    local key = table.concat({ target, profile.key, player.level, maxLevel, s.slotFilter or "all" }, ":")
+    -- The pick depends on the weights (own profile included); owned and the comparison are worked out fresh.
+    local key = table.concat({ target, P.Signature(profile), player.level, maxLevel }, ":")
     local cached = bisCache[key]
-    if cached and not cached.loading then return cached.list, false, {}, "bis" end
+    local function build(picks)
+        local list = {}
+        for _, best in ipairs(picks) do
+            if GP.SlotAllowed(best.slot) then
+                local id = best.item.id
+                local worn = equipped[best.slot] and equipped[best.slot].id == id
+                list[#list + 1] = { kind = "bis", bis = true, key = "bis:" .. best.slot, id = id, item = best.item, slot = best.slot,
+                    score = best.score, owned = worn or GP.Wish.Owned(id),
+                    result = P.Compare(best.item, equipped, profile, player.class, player.level),
+                    sourceText = sourceShort(best.entry and best.entry.row) }
+            end
+        end
+        return list
+    end
+    if cached and not cached.loading then return build(cached.picks), false, {}, "bis" end
     local db = GP.Sources.Database()
     if not db then return {}, false, { missing = true }, "bis" end
     local rows = {}
@@ -1541,19 +1559,9 @@ function GP.BisList(s, low, high, profile, player, equipped)
             end
         end
     end
-    local list = {}
-    for _, best in ipairs(P.BestInSlot(pool, profile, player.class, player.level, maxLevel)) do
-        if GP.SlotAllowed(best.slot) then
-            local id = best.item.id
-            local worn = equipped[best.slot] and equipped[best.slot].id == id
-            list[#list + 1] = { kind = "bis", bis = true, key = "bis:" .. best.slot, id = id, item = best.item, slot = best.slot,
-                score = best.score, owned = worn or GP.Wish.Owned(id),
-                result = P.Compare(best.item, equipped, profile, player.class, player.level),
-                sourceText = sourceShort(best.entry and best.entry.row) }
-        end
-    end
-    bisCache[key] = { list = list, loading = loading }
-    return list, loading, {}, "bis"
+    local picks = P.BestInSlot(pool, profile, player.class, player.level, maxLevel)
+    bisCache[key] = { picks = picks, loading = loading }
+    return build(picks), loading, {}, "bis"
 end
 function GP.AdoptBis()
     local s = GP.settings
@@ -1723,7 +1731,7 @@ local function pageData(page, s, low, high, equipped, profile, player)
         -- Every item with a price from your last scan: required level from 10 below your level to the top of the range.
         local entries, loading, state = GP.AuctionCandidates(player.level - 10, high)
         local all = P.Recommend(entries, equipped, { level = player.level, below = 10, above = s.above, profile = profile,
-            class = player.class })
+            class = player.class, slotAllowed = GP.SlotAllowed })
         local list, cap = {}, s.ahMax or 0
         for _, result in ipairs(all) do
             local row = result.entry.row
@@ -1899,7 +1907,7 @@ function GP.Render()
     if not build and GP.Sources.state == "unknown" then GP.Sources.Database(); build = GP.Sources.BuildDate() end
     U.dataChip.label:SetText(build and ("ForeverDB " .. build:sub(9, 10) .. "." .. build:sub(6, 7) .. ".") or L("ForeverDB missing"))
     if build then U.dataChip.dot:SetVertexColor(C.green[1], C.green[2], C.green[3]) else U.dataChip.dot:SetVertexColor(C.red[1], C.red[2], C.red[3]) end
-    U.footer:SetText(L("Provisional weights · weapon DPS counts, random proc effects do not · data: ForeverDB"))
+    U.footer:SetText(L("Provisional weights · weapon DPS counts, random proc effects do not · data: ForeverDB, AllTheThings"))
 
     for _, c in pairs(U.controls) do c:Hide() end
     for _, t in ipairs(pageLines) do t:Hide() end

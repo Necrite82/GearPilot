@@ -38,8 +38,8 @@ local de = {
     ["ForeverDB is not installed. Quests and dungeons need it; the CurseForge app installs it with GearPilot."] =
         "ForeverDB ist nicht installiert. Quests und Dungeons brauchen es; die CurseForge-App installiert es mit GearPilot.",
     ["ForeverDB missing"] = "ForeverDB fehlt", ["Data: ForeverDB (GPL-3.0)"] = "Daten: ForeverDB (GPL-3.0)",
-    ["Provisional weights · weapon DPS counts, random proc effects do not · data: ForeverDB"] =
-        "Vorläufige Gewichtungen · Waffen-DPS zählt, Zufallseffekte nicht · Daten: ForeverDB",
+    ["Provisional weights · weapon DPS counts, random proc effects do not · data: ForeverDB, AllTheThings"] =
+        "Vorläufige Gewichtungen · Waffen-DPS zählt, Zufallseffekte nicht · Daten: ForeverDB, AllTheThings",
     ["Stat profile"] = "Werteprofil",
     ["Which values count. Provisional weights; weapon DPS is included, random proc effects are not."] =
         "Welche Werte zählen. Vorläufige Gewichtungen; Waffen-DPS zählt mit, Zufallseffekte nicht.",
@@ -317,6 +317,13 @@ local de = {
     ["ca. %d %% (estimated)"] = "ca. %d %% (geschätzt)",
     ["Drop chance not recorded yet; estimated from the boss's loot table (AllTheThings): about %d %%."] =
         "Dropchance noch nicht erfasst; geschätzt aus der Beutetabelle des Bosses (AllTheThings): etwa %d %%.",
+    -- 1.0.1
+    ["%d drop chances are estimated from the boss's loot table (AllTheThings)."] =
+        "%d Dropchancen sind aus der Beutetabelle des Bosses geschätzt (AllTheThings).",
+    ["Bosses and loot of the new Forever dungeons: AllTheThings (MIT)."] = "Bosse und Beute der neuen Forever-Dungeons: AllTheThings (MIT).",
+    ["Data sources"] = "Datenquellen",
+    ["Bosses and loot of the new Forever dungeons come from AllTheThings (MIT, github.com/ATTWoWAddon/AllTheThings)."] =
+        "Bosse und Beute der neuen Forever-Dungeons stammen aus AllTheThings (MIT, github.com/ATTWoWAddon/AllTheThings).",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

@@ -33,8 +33,11 @@ function Route.Chain(questID)
     local steps = {}
     if not ForeverDB then return steps end
     local player = GP.Player()
-    for _, id in ipairs(S.Chain(ForeverDB, questID, player.faction, player.raceBit, S.QuestDone)) do
-        steps[#steps + 1] = Route.Step(id)
+    local ids, parents = S.Chain(ForeverDB, questID, player.faction, player.raceBit, S.QuestDone)
+    for _, id in ipairs(ids) do
+        local step = Route.Step(id)
+        step.pre = parents and parents[id] or {}
+        steps[#steps + 1] = step
     end
     return steps
 end
@@ -75,8 +78,10 @@ end
 -- Whole chain: every open step (not done, not in the quest log).
 function Route.ToChain(questID)
     local open = {}
-    for _, step in ipairs(Route.Chain(questID)) do
-        if not step.done and not step.active then open[#open + 1] = step end
+    local steps = Route.Chain(questID)
+    GP.Planner.ChainStatus(steps)
+    for _, step in ipairs(steps) do
+        if not step.done and not step.active and not step.skipped then open[#open + 1] = step end
     end
     if #open == 0 then
         say(L("Every quest of this chain is done or already in your quest log."))
