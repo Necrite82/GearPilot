@@ -97,8 +97,13 @@ U.dataChip = chip(130)
 U.dataChip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, -30)
 U.rangeChip = chip(184)
 U.rangeChip:SetPoint("RIGHT", U.dataChip, "LEFT", -8, 0)
+U.dungeonChip = chip(130)
+U.dungeonChip:SetPoint("RIGHT", U.rangeChip, "LEFT", -8, 0)
+tooltip(U.dungeonChip, function() return L("Dungeon range") end, function()
+    return { L("Dungeons whose level range overlaps this range count for your upgrades. Set it in the settings.") }
+end)
 tooltip(U.rangeChip, function() return L("Level range") end, function()
-    return { L("Quests and dungeons in this range are compared. Bag items are always compared.") }
+    return { L("Quests and the other sources in this range are compared; dungeons have their own range. Bag items are always compared.") }
 end)
 tooltip(U.dataChip, "ForeverDB", function()
     local build = GP.Sources.BuildDate()
@@ -354,7 +359,18 @@ segmentPill({ "quests" }, "View", 100, { { "items", "Items" }, { "zones", "Zones
 segmentPill({ "quests" }, "Sort", 90, { { "gain", "Score" }, { "distance", "Distance" }, { "zone", "Zone" } }, "questSort", "gain")
 segmentPill({ "quests" }, "Quest chains", 100, { { "all", "All" }, { "started", "Started" } }, "chains", "all")
 segmentPill({ "quests" }, "Dungeon quests", 90, { { "show", "Show" }, { "hide", "Hide" }, { "only", "Only" } }, "dungeonQuests", "show")
-segmentPill({ "dungeons" }, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" } }, "views.dungeons", "items")
+segmentPill({ "dungeons" }, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" }, { "togo", "To go" } }, "views.dungeons", "items")
+local dungeonShow = segmentPill({ "dungeons" }, "Show", 120, { { "all", "All dungeons" }, { "range", "Only in range" } }, "dungeonShow", "all")
+dungeonShow.when = function() return (GP.settings.views.dungeons or "items") == "overview" end
+local prepare = actionPill({ "dungeons" }, "To go", 170, { { "Prepare all", function()
+    local _, byName = GP.Catalog()
+    local list = {}
+    for _, entry in ipairs(GP.Togo.List()) do
+        if byName[entry.name] then list[#list + 1] = byName[entry.name] end
+    end
+    GP.Togo.Prepare(list)
+end } })
+prepare.when = function() return (GP.settings.views.dungeons or "items") == "togo" end
 segmentPill({ "shop" }, "Source", 104, { { "all", "All" }, { "Vendors", "Vendors" }, { "Auction", "Auction house" }, { "Crafted", "Crafting" } }, "shopSource", "all")
 segmentPill({ "shop" }, "Sort", 90, { { "gain", "Score" }, { "price", "Price" }, { "value", "Per gold" } }, "shopSort", "gain")
 segmentPill({ "shop" }, "Max. price", 58, { { 0, "All" }, { 10000, "1g" }, { 100000, "10g" }, { 500000, "50g" } }, "shopMax", 0)
@@ -594,6 +610,7 @@ local function itemLine(item, sub, right, rightColor)
     f.name:SetText(item and (S.QualityColor(item.quality) .. (item.name or "?") .. "|r") or "?")
     f.sub:SetText(sub or "")
     f.right:SetText(right or "")
+    f:SetAlpha(1)
     local c = rightColor or C.green
     f.right:SetTextColor(c[1], c[2], c[3])
     f:Show()
@@ -607,7 +624,8 @@ local SOURCE_ICONS = {
     quest = "Interface\\GossipFrame\\AvailableQuestIcon", dungeon = "Interface\\Icons\\INV_Misc_Head_Dragon_01",
     vendor = "Interface\\GossipFrame\\VendorGossipIcon", craft = "Interface\\Icons\\Trade_BlackSmithing",
     mob = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", world = "Interface\\Icons\\INV_Misc_Bag_10",
-    auction = "Interface\\Icons\\INV_Misc_Coin_04",
+    auction = "Interface\\Icons\\INV_Misc_Coin_04", questdone = "Interface\\RaidFrame\\ReadyCheck-Ready",
+    questactive = "Interface\\GossipFrame\\ActiveQuestIcon",
 }
 local function sourceLine2(kind, title, sub, buttonText, callback)
     U.sourceLines.used = (U.sourceLines.used or 0) + 1
@@ -839,6 +857,10 @@ local function resetDetail()
     U.action:Hide()
     U.action2:Hide()
     U.wishButton:Hide()
+    U.togoButton:Hide()
+    U.orderUp:Hide()
+    U.orderDown:Hide()
+    U.detailDungeon = nil
     hideBars()
     hideSteps()
     for _, f in ipairs(U.itemLines) do f:Hide() end
@@ -862,6 +884,20 @@ local professionNames = {
     blacksmithing = "Blacksmithing", leatherworking = "Leatherworking", tailoring = "Tailoring",
     engineering = "Engineering", alchemy = "Alchemy", enchanting = "Enchanting",
 }
+-- Armor type of an armor item (cloth, leather, mail, plate), shown next to the slot; nil for the rest.
+local ARMOR_TYPES = { "Cloth", "Leather", "Mail", "Plate" }
+local function armorType(item)
+    if item and item.classID == 4 and ARMOR_TYPES[item.subclassID or 0] and item.equip ~= "INVTYPE_CLOAK" then
+        return L(ARMOR_TYPES[item.subclassID])
+    end
+    return nil
+end
+-- "Hands · Leather", or just the slot.
+local function slotText(item, slot)
+    local name = L(P.slotNames[slot] or "")
+    local armor = armorType(item)
+    return armor and (name .. " · " .. armor) or name
+end
 local function sourceLine(entry)
     local row = entry.row
     if entry.source == "Bags" then return L("In your bags") end
@@ -888,22 +924,33 @@ local function sourceLine(entry)
     return ("%s%s"):format(GP.Sources.DungeonName(row), chance)
 end
 
+-- Level windows per source: quests (optionally until they turn grey), dungeons (their own range: read by the
+-- dungeon's level range, scored up to its top), everything else your level range.
+local function windows(player, low, high)
+    local s = GP.settings
+    local questLow = s.questsGrey and math.min(low, P.GreyLevel(player.level) + 1) or low
+    local dungeonLow, dungeonHigh = GP.DungeonRange()
+    return { read = { Quests = { questLow, high }, Dungeons = { dungeonLow, dungeonHigh } },
+        score = { Quests = { questLow, high }, Dungeons = { 1, dungeonHigh } } }
+end
 -- Reads the sources; returns entries, loading flag and the states (missing, nocraftpilot, noauction).
-local function collect(sources, low, high)
+local function collect(sources, low, high, options)
     local all, loading, states = {}, false, {}
     for _, source in ipairs(sources) do
-        local entries, isLoading, state = GP.ReadCandidates(source, low, high)
+        local window = options and options.read and options.read[source]
+        local entries, isLoading, state = GP.ReadCandidates(source, window and window[1] or low, window and window[2] or high, options)
         loading = loading or isLoading
         states[state] = true
         for _, entry in ipairs(entries) do all[#all + 1] = entry end
     end
     return all, loading, states
 end
-local function recommend(sources, low, high, equipped, profile, player)
-    local candidates, loading, states = collect(sources, low, high)
+local function recommend(sources, low, high, equipped, profile, player, all)
+    local win = windows(player, low, high)
+    local candidates, loading, states = collect(sources, low, high, { read = win.read, all = all })
     local s = GP.settings
     local list = P.Recommend(candidates, equipped, { level = player.level, below = s.below, above = s.above, profile = profile,
-        class = player.class, slotAllowed = GP.SlotAllowed })
+        class = player.class, slotAllowed = GP.SlotAllowed, windows = win.score })
     return list, loading, states
 end
 
@@ -1005,7 +1052,7 @@ end
 
 local function showUpgrade(result, profile)
     local item, entry, row = result.item, result.entry, result.entry.row
-    showItemHead(item, ("%s · %s"):format(L(P.slotNames[result.slot] or ""), sourceLine(entry)))
+    showItemHead(item, ("%s · %s"):format(slotText(item, result.slot), sourceLine(entry)))
     local width = (U.detail:GetWidth() or 300) - 24
     local replaced = result.current and result.current.name or L("Empty slot")
     if result.second and result.second.name then replaced = replaced .. " + " .. result.second.name end
@@ -1260,15 +1307,72 @@ local function showZone(zone)
     end
 end
 
-local function showDungeon(dungeon)
-    local row = dungeon.row
-    showHead("Interface\\Icons\\INV_Misc_Head_Dragon_01", GP.Sources.DungeonName(row) .. (row.raid and (" (" .. L("raid") .. ")") or ""),
-        (L("Level %d–%d"):format(dungeon.low, dungeon.high)))
+-- Dungeon details in GearPilot's own layout: what the dungeon brings you (metrics), what to do before (quests
+-- with their chains), and the loot per boss (your upgrades bright, wishlist items marked, the rest dimmed).
+U.togoButton = S.Button(U.detail, 130, 24, "", function()
+    if U.detailDungeon then GP.Togo.Toggle(U.detailDungeon) end
+end)
+U.togoButton:SetPoint("TOPRIGHT", U.detail, "TOPRIGHT", -12, -12)
+U.togoButton:Hide()
+U.orderUp = S.Button(U.detail, 120, 24, L("Move up"), function() if U.detailDungeon then GP.Togo.Move(U.detailDungeon, -1) end end)
+U.orderUp:Hide()
+U.orderDown = S.Button(U.detail, 120, 24, L("Move down"), function() if U.detailDungeon then GP.Togo.Move(U.detailDungeon, 1) end end)
+U.orderDown:Hide()
+local questRowsCache
+-- Quest rows by quest ID (rewards for your class), for the best reward of a dungeon quest.
+local function questRows()
+    local player = GP.Player()
+    local rows = GP.Sources.Rows(player.class, player.faction, GP.settings.minChance, player.raceBit) or {}
+    if not questRowsCache or questRowsCache.rows ~= rows then
+        local byQuest = {}
+        for _, r in ipairs(rows) do
+            if r.source == "Quests" then
+                byQuest[r.sourceID] = byQuest[r.sourceID] or {}
+                table.insert(byQuest[r.sourceID], r)
+            end
+        end
+        questRowsCache = { rows = rows, byQuest = byQuest }
+    end
+    return questRowsCache.byQuest
+end
+local function bestReward(questID, equipped, profile, player)
+    local best
+    for _, r in ipairs(questRows()[questID] or {}) do
+        local item = GP.ItemData(r.itemID)
+        if item.name then
+            local result = P.Compare(item, equipped, profile, player.class, player.level)
+            if result and result.gain and result.gain > 0 and (not best or result.gain > best.gain) then
+                best = { item = item, gain = result.gain }
+            end
+        end
+    end
+    return best
+end
+local function showDungeon(dungeon, profile, equipped)
+    local row, d = dungeon.row, dungeon.catalog
+    local player = GP.Player()
+    local name = GP.Sources.DungeonName(row)
+    local sub = (L("Level %d–%d"):format(dungeon.low, dungeon.high)) .. " · "
+        .. (dungeon.inRange and ("|cff85d6a0" .. L("in your range") .. "|r") or L("outside your range"))
+        .. (row.raid and (" · " .. L("raid")) or "")
+    showHead("Interface\\Icons\\INV_Misc_Head_Dragon_01", name, sub)
+    -- Head button: on your to go list or not.
+    U.detailDungeon = d and d.name
+    local onList = d and GP.Togo.Has(d.name)
+    U.togoButton:SetShown(d ~= nil)
+    U.togoButton:SetText(onList and L("On to go list") or L("+ To go"))
+    if onList then S.Primary(U.togoButton) else
+        U.togoButton:SetBackdropColor(.114, .133, .165, 1)
+        local label = U.togoButton:GetFontString()
+        if label then label:SetTextColor(.88, .69, .31) end
+    end
+    U.detailName:SetWidth((U.detail:GetWidth() or 300) - 72 - 140)
+    local quests, open = GP.Togo.Quests(d)
     local width = (U.detail:GetWidth() or 300) - 24
     S.Metrics(U.detail, {
         { label = L("Expected per run"), value = "Ø " .. signed(dungeon.expected), color = C.green, emphasis = true },
         { label = L("Upgrades"), value = tostring(#dungeon.results), color = C.text },
-        { label = L("Dungeon quests"), value = tostring(#dungeon.quests), color = C.text },
+        { label = L("Open quests"), value = (#quests > 0) and (open .. " / " .. #quests) or "0", color = C.text },
     }, 12, detailY, width)
     detailY = detailY + 60
     if (dungeon.estimated or 0) > 0 then
@@ -1277,29 +1381,97 @@ local function showDungeon(dungeon)
     if dungeon.unknown > 0 then
         detailLine("GameFontDisableSmall", (L("%d drop chances are unknown and count as %d %%."):format(dungeon.unknown, P.UNKNOWN_CHANCE * 100)), C.muted)
     end
-    -- Items by boss.
-    local bosses, order = {}, {}
+    if dungeon.togo then
+        detailLine("GameFontHighlightSmall", (L("On your to go list: %d runs so far."):format(dungeon.togo.runs or 0)), C.gold)
+        local position = 0
+        for index, entry in ipairs(GP.Togo.List()) do if entry.name == d.name then position = index end end
+        local count = #GP.Togo.List()
+        if count > 1 then
+            U.orderUp:ClearAllPoints()
+            U.orderUp:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12, -detailY)
+            U.orderUp:SetShown(position > 1)
+            U.orderDown:ClearAllPoints()
+            U.orderDown:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12 + (position > 1 and 128 or 0), -detailY)
+            U.orderDown:SetShown(position < count)
+            detailY = detailY + 30
+        end
+    end
+    -- Way there and preparation.
+    local db = ForeverDB
+    local entrance = db and GP.Sources.Entrance(db, d and d.name or row.name)
+    local nextSteps = GP.Togo.NextSteps(quests)
+    local first = entrance and { L("Waypoint to the entrance"), function() GP.Route.ToSpot(entrance, name) end, 200 } or nil
+    local second = #nextSteps > 0 and { (L("Collect quests (%d)")):format(#nextSteps), function() GP.Route.ToMany(nextSteps) end, 170 } or nil
+    if first then actions(first, second) elseif second then actions(second) end
+    -- Quests
+    if #quests > 0 then
+        section(L("Quests") .. "  |cff9dabb8" .. (L("%d of %d done"):format(#quests - open, #quests)) .. "|r")
+        for _, info in ipairs(quests) do
+            local chain = info.done and {} or GP.Route.Chain(info.id)
+            local done = 0
+            if #chain > 1 then done = P.ChainStatus(chain) end
+            local parts = { (L("Level %d")):format(info.level or 0) }
+            if info.giver then parts[#parts + 1] = info.giver end
+            if info.done then parts[#parts + 1] = "|cff85d6a0" .. L("done") .. "|r"
+            elseif info.active then parts[#parts + 1] = "|cffe0b050" .. L("in quest log") .. "|r"
+            elseif #chain > 1 then parts[#parts + 1] = (L("chain %d of %d"):format(done, #chain)) end
+            if not info.done then
+                local reward = bestReward(info.id, equipped, profile, player)
+                if reward then parts[#parts + 1] = "|cff85d6a0" .. signed(reward.gain) .. "|r " .. (reward.item.name or "") end
+            end
+            local kind = info.done and "questdone" or info.active and "questactive" or "quest"
+            local title = GP.Sources.QuestTitle(info.id, info.title) or ("#" .. info.id)
+            if info.done then title = "|cff9dabb8" .. title .. "|r" end
+            local button, callback
+            if not info.done then
+                if #chain > 1 then
+                    button, callback = (L("Chain (%d)")):format(#chain), function() GP.Route.ToChain(info.id) end
+                else
+                    button, callback = L("Waypoint"), function() GP.Route.ToGiver(info.id) end
+                end
+            end
+            sourceLine2(kind, title, table.concat(parts, " · "), button, callback)
+        end
+    end
+    -- Bosses and loot.
+    local upgrades = {}
     for _, result in ipairs(dungeon.results) do
-        local boss = result.entry.row.boss or L("Unknown")
-        if not bosses[boss] then bosses[boss] = {}; order[#order + 1] = boss end
-        table.insert(bosses[boss], result)
+        if result.item and result.item.id then upgrades[result.item.id] = result end
     end
-    for _, boss in ipairs(order) do
-        section(boss)
-        for _, result in ipairs(bosses[boss]) do
-            itemLine(result.item, L(P.slotNames[result.slot] or "") .. " · " .. L("Drop chance") .. " "
-                .. (GP.Sources.ChanceText(result.entry.row) or L("unknown")), signed(result.gain))
+    local wishes = GP.Wish.List()
+    if d and #d.bosses > 0 then
+        for _, boss in ipairs(d.bosses) do
+            if #boss.items > 0 then
+                section(boss.name or L("Unknown"))
+                for _, id in ipairs(boss.items) do
+                    local item = GP.ItemData(id)
+                    local result = upgrades[id]
+                    local wish = wishes[id]
+                    local parts = {}
+                    if item.equip then parts[#parts + 1] = slotText(item, P.targetSlots[item.equip] and P.targetSlots[item.equip][1]) end
+                    if wish then parts[#parts + 1] = "|cffe0b050" .. (wish.got and L("received") or L("on wishlist")) .. "|r" end
+                    if result then parts[#parts + 1] = L("Drop chance") .. " " .. (GP.Sources.ChanceText(result.entry.row) or L("unknown")) end
+                    local f = itemLine(item.name and item or { name = L("Loading item data …") }, table.concat(parts, " · "),
+                        result and signed(result.gain) or "")
+                    f:SetAlpha((result or wish) and 1 or .5)
+                end
+            end
         end
-    end
-    if #dungeon.quests > 0 then
-        section(L("Dungeon quests"))
-        local ids = {}
-        for _, result in ipairs(dungeon.quests) do
-            local qrow = result.entry.row
-            ids[#ids + 1] = qrow.sourceID
-            itemLine(result.item, GP.Sources.QuestTitle(qrow.sourceID, qrow.name) .. (qrow.giver and (" · " .. qrow.giver) or ""), signed(result.gain))
+    elseif #dungeon.results > 0 then
+        -- No boss list (raids without AllTheThings data): the upgrades by boss as before.
+        local bosses, order = {}, {}
+        for _, result in ipairs(dungeon.results) do
+            local boss = result.entry.row.boss or L("Unknown")
+            if not bosses[boss] then bosses[boss] = {}; order[#order + 1] = boss end
+            table.insert(bosses[boss], result)
         end
-        actions({ (L("Waypoints to the quest givers (%d)")):format(#ids), function() GP.Route.ToMany(ids) end, 250 })
+        for _, boss in ipairs(order) do
+            section(boss)
+            for _, result in ipairs(bosses[boss]) do
+                itemLine(result.item, slotText(result.item, result.slot) .. " · " .. L("Drop chance") .. " "
+                    .. (GP.Sources.ChanceText(result.entry.row) or L("unknown")), signed(result.gain))
+            end
+        end
     end
 end
 
@@ -1366,8 +1538,8 @@ local function renderSettings()
         y = y + 40
     end
     text("GameFontNormal", L("Level range"), C.gold)
-    text("GameFontHighlightSmall", L("Quests and dungeons from this many levels below to this many levels above your level are compared."))
-    local function stepper(key, label, field, xx)
+    text("GameFontHighlightSmall", L("Quests, vendors, crafting and the auction house from this many levels below to this many levels above your level are compared. Dungeons have their own range below."))
+    local function stepper(key, label, field, xx, max)
         n = n + 1
         pageText(n, "GameFontHighlightSmall", xx, y + 6, 120, label)
         local minus = control(key .. "-", 26, "-", function() s[field] = math.max(0, s[field] - 1); GP.Render() end)
@@ -1375,13 +1547,23 @@ local function renderSettings()
         minus:SetPoint("TOPLEFT", U.pageContent, "TOPLEFT", xx + 124, -y)
         n = n + 1
         pageText(n, "GameFontHighlight", xx + 154, y + 6, 30, tostring(s[field]), C.gold, "CENTER")
-        local plus = control(key .. "+", 26, "+", function() s[field] = math.min(10, s[field] + 1); GP.Render() end)
+        local plus = control(key .. "+", 26, "+", function() s[field] = math.min(max or 10, s[field] + 1); GP.Render() end)
         plus:ClearAllPoints()
         plus:SetPoint("TOPLEFT", U.pageContent, "TOPLEFT", xx + 188, -y)
     end
     stepper("below", L("Levels below"), "below", 16)
     stepper("above", L("Levels above"), "above", 260)
     y = y + 44
+    text("GameFontHighlightSmall", L("Quests until they turn grey: also older quests that still give experience."))
+    toggle("questsGrey", "questsGrey")
+
+    text("GameFontNormal", L("Dungeon range"), C.gold)
+    text("GameFontHighlightSmall", L("A dungeon counts when its level range overlaps this range: from this many levels below to this many levels above your level. The other dungeons stay visible under Per dungeon, dimmed."))
+    stepper("dungeonBelow", L("Levels below"), "dungeonBelow", 16, 15)
+    stepper("dungeonAbove", L("Levels above"), "dungeonAbove", 260, 15)
+    y = y + 44
+    text("GameFontHighlightSmall", L("To go list: remove a dungeon by itself once its quests are done and its wishlist items received."))
+    toggle("togoAuto", "togoAutoRemove")
 
     text("GameFontNormal", L("Stat profile"), C.gold)
     text("GameFontHighlightSmall", L("Automatic picks the profile from your talents. The weights are provisional and will be refined with player feedback."))
@@ -1466,10 +1648,12 @@ local function renderHelp()
     end
     text("GameFontNormal", L("How GearPilot works"), C.gold)
     text("GameFontHighlightSmall", L("GearPilot scores every item with the values of your stat profile and compares it with what you wear in the same slot. The score gain is the difference."))
-    text("GameFontHighlightSmall", L("Best upgrades lists bag items, quest rewards and dungeon drops together. Quests and dungeons only count inside your level range; quests you have done are hidden."))
+    text("GameFontHighlightSmall", L("Best upgrades lists bag items, quest rewards and dungeon drops together. Quests count inside your level range, dungeons inside the dungeon range; quests you have done are hidden."))
     text("GameFontHighlightSmall", L("Quest choice rewards: you can take one item per quest, so only the best one is shown."))
     text("GameFontNormal", L("Views"), C.gold)
     text("GameFontHighlightSmall", L("Quests by zone: where questing pays most, with waypoints to every quest giver. Dungeons per dungeon: the expected gain of one run (score gain times drop chance) plus the dungeon quests."))
+    text("GameFontHighlightSmall", L("Dungeon details: your upgrades and the expected gain of one run, every quest of the dungeon with its chain and best reward, and the loot of every boss (your upgrades bright, wishlist items marked). Dungeons outside your range stay visible, dimmed."))
+    text("GameFontHighlightSmall", L("To go: your own list of dungeons to run. Order it, collect every quest you need before the runs in one go (nearest first), and see how often you have been there."))
     text("GameFontHighlightSmall", L("Buy & craft: vendor gear, the auction house (Auctionator prices) and recipes from CraftPilot. Bags: upgrades, and gear that can go."))
     text("GameFontHighlightSmall", L("Wishlist: add items with the button in any item details or with Ctrl+Alt-click (Alt-click stays with CraftPilot). Every source is listed with a waypoint, the dungeon entrance or the hand-over to CraftPilot. One goal per slot gives your own BIS list; share it as text."))
     text("GameFontHighlightSmall", L("BIS (calculated): GearPilot works out the best item per slot from quests, dungeons, vendors and crafting with your profile's weights. It is not an official BIS list: set bonuses and random effects are not scored and the weights are provisional."))
@@ -1654,12 +1838,67 @@ local function pageData(page, s, low, high, equipped, profile, player)
         return list, loading, states, "upgrade"
     end
     if page == "dungeons" then
-        local list, loading, states = recommend({ "Dungeons" }, low, high, equipped, profile, player)
-        if (s.views.dungeons or "items") == "overview" then
-            local quests = recommend({ "Quests" }, low, high, equipped, profile, player)
-            return P.ByDungeon(list, quests), loading, states, "dungeon"
+        local view = s.views.dungeons or "items"
+        if view == "items" then
+            local list, loading, states = recommend({ "Dungeons" }, low, high, equipped, profile, player)
+            return list, loading, states, "upgrade"
         end
-        return list, loading, states, "upgrade"
+        -- Per dungeon and to go: every dungeon of the catalog, upgrades from all of them.
+        local drops, loading, states = recommend({ "Dungeons" }, low, high, equipped, profile, player, true)
+        local quests = recommend({ "Quests" }, low, high, equipped, profile, player)
+        local byName = {}
+        for _, entry in ipairs(P.ByDungeon(drops, quests)) do byName[entry.name] = entry end
+        local catalog = GP.Catalog()
+        local dLow, dHigh = GP.DungeonRange()
+        local function entryFor(d)
+            local entry = byName[d.name] or { key = "dungeon:" .. d.name, name = d.name, row = { name = d.name }, results = {},
+                quests = {}, expected = 0, unknown = 0 }
+            entry.row.mapID = entry.row.mapID or d.mapID
+            entry.row.raid = entry.row.raid or d.raid
+            entry.catalog = d
+            entry.low, entry.high = d.low, d.high
+            entry.inRange = GP.DungeonInRange(d, dLow, dHigh)
+            local _, open = GP.Togo.Quests(d)
+            entry.openQuests = open
+            return entry
+        end
+        local list = {}
+        if view == "togo" then
+            local _, cat = GP.Catalog()
+            local finished = {}
+            for _, saved in ipairs(GP.Togo.List()) do
+                local d = cat[saved.name]
+                if d then
+                    if s.togoAutoRemove and GP.Togo.Finished(d) then
+                        finished[#finished + 1] = d.name
+                    else
+                        local entry = entryFor(d)
+                        entry.togo = saved
+                        entry.wishCount = #GP.Togo.WishItems(d)
+                        list[#list + 1] = entry
+                    end
+                end
+            end
+            for _, name in ipairs(finished) do GP.Togo.Remove(name) end
+            return list, loading, states, "dungeon"
+        end
+        for _, d in ipairs(catalog) do
+            local entry = entryFor(d)
+            if entry.inRange or s.dungeonShow ~= "range" then list[#list + 1] = entry end
+        end
+        local level = player.level
+        table.sort(list, function(a, b)
+            if a.inRange ~= b.inRange then return a.inRange end
+            if a.inRange then
+                if a.expected ~= b.expected then return a.expected > b.expected end
+                return a.low < b.low
+            end
+            local da = math.min(math.abs(a.low - level), math.abs(a.high - level))
+            local db = math.min(math.abs(b.low - level), math.abs(b.high - level))
+            if da ~= db then return da < db end
+            return a.low < b.low
+        end)
+        return list, loading, states, "dungeon"
     end
     if page == "shop" then
         local sources = s.shopSource == "all" and { "Vendors", "Auction", "Crafted" } or { s.shopSource }
@@ -1796,12 +2035,18 @@ local function emptyMessage(page, kind, loading, states)
     end
     if (GP.settings.slotFilter or "all") ~= "all" then return L("No upgrades for this slot. Choose all slots or another slot.") end
     if kind == "clutter" then return L("Nothing to get rid of: all gear in your bags is useful.") end
+    if page == "dungeons" and (GP.settings.views.dungeons or "items") == "togo" then
+        return L("Your to go list is empty. Open a dungeon under Per dungeon and add it with + To go.")
+    end
     return L("No upgrades in this selection. Try a wider level range in the settings.")
 end
 
 local function fillRow(r, kind, data, width, list)
     local item = data.item
     r.link = item and item.link
+    r.icon:SetDesaturated(false)
+    r.icon:SetAlpha(1)
+    color(r.name, C.text)
     r.name:SetWidth(width - 120)
     r.sub:SetWidth(width - 120)
     if kind == "gear" then
@@ -1836,7 +2081,7 @@ local function fillRow(r, kind, data, width, list)
         local status = data.owned and ("|cff85d6a0" .. L("received") .. "|r") or (wish and wish.goal and ("|cffe0b050" .. L("goal") .. "|r"))
             or (kind == "bis" and wish and L("on wishlist")) or nil
         local where = data.sourceText or ""
-        r.sub:SetText(L(P.slotNames[data.slot] or "") .. (status and (" · " .. status) or "") .. (where ~= "" and (" · " .. where) or ""))
+        r.sub:SetText(slotText(item, data.slot) .. (status and (" · " .. status) or "") .. (where ~= "" and (" · " .. where) or ""))
         local result = data.result
         if data.owned or (result and result.worn) then
             r.value:SetText(L("worn"))
@@ -1858,11 +2103,21 @@ local function fillRow(r, kind, data, width, list)
         color(r.value, C.green)
     elseif kind == "dungeon" then
         r.icon:SetTexture("Interface\\Icons\\INV_Misc_Head_Dragon_01")
-        r.name:SetText(GP.Sources.DungeonName(data.row))
-        r.sub:SetText((L("Level %d–%d"):format(data.low, data.high)) .. " · " .. (L("%d upgrades"):format(#data.results))
-            .. (#data.quests > 0 and (" · " .. (L("%d quests"):format(#data.quests))) or ""))
-        r.value:SetText("Ø " .. signed(data.expected))
-        color(r.value, C.green)
+        r.icon:SetDesaturated(not data.inRange)
+        r.icon:SetAlpha(data.inRange and 1 or .5)
+        r.name:SetText(GP.Sources.DungeonName(data.row) .. (data.row.raid and (" (" .. L("raid") .. ")") or ""))
+        color(r.name, data.inRange and C.text or C.muted)
+        local parts = { (L("Level %d–%d"):format(data.low, data.high)) }
+        if not data.inRange then parts[#parts + 1] = L("outside your range") end
+        if #data.results > 0 then parts[#parts + 1] = (L("%d upgrades"):format(#data.results)) end
+        if (data.openQuests or 0) > 0 then parts[#parts + 1] = (L("%d open quests"):format(data.openQuests)) end
+        if data.togo then
+            parts[#parts + 1] = (L("%d runs"):format(data.togo.runs or 0))
+            if (data.wishCount or 0) > 0 then parts[#parts + 1] = (L("%d wishlist items"):format(data.wishCount)) end
+        end
+        r.sub:SetText(table.concat(parts, " · "))
+        r.value:SetText(data.expected > 0 and ("Ø " .. signed(data.expected)) or "")
+        color(r.value, data.inRange and C.green or C.muted)
     elseif kind == "clutter" then
         r.icon:SetTexture(item.icon)
         r.name:SetText(S.QualityColor(item.quality) .. item.name .. "|r")
@@ -1873,7 +2128,7 @@ local function fillRow(r, kind, data, width, list)
     else
         r.icon:SetTexture(item.icon)
         r.name:SetText(S.QualityColor(item.quality) .. item.name .. "|r")
-        r.sub:SetText(L(P.slotNames[data.slot] or "") .. " · " .. sourceLine(data.entry))
+        r.sub:SetText(slotText(item, data.slot) .. " · " .. sourceLine(data.entry))
         r.value:SetText(signed(data.gain))
         color(r.value, C.green)
     end
@@ -1903,6 +2158,9 @@ function GP.Render()
     U.sideFoot:SetText("GearPilot " .. tostring(GP.version or ""))
     U.rangeChip.label:SetText((L("Level %d · range %d–%d")):format(player.level, low, high))
     U.rangeChip.dot:SetVertexColor(C.gold[1], C.gold[2], C.gold[3])
+    local dLow, dHigh = GP.DungeonRange()
+    U.dungeonChip.label:SetText((L("Dungeons %d–%d")):format(dLow, dHigh))
+    U.dungeonChip.dot:SetVertexColor(.53, .66, .86)
     local build = GP.Sources.BuildDate()
     if not build and GP.Sources.state == "unknown" then GP.Sources.Database(); build = GP.Sources.BuildDate() end
     U.dataChip.label:SetText(build and ("ForeverDB " .. build:sub(9, 10) .. "." .. build:sub(6, 7) .. ".") or L("ForeverDB missing"))
@@ -1999,7 +2257,7 @@ function GP.Render()
     elseif kind == "zone" then
         showZone(found)
     elseif kind == "dungeon" then
-        showDungeon(found)
+        showDungeon(found, profile, equipped)
     elseif kind == "clutter" then
         showClutter(found, list.total)
     else

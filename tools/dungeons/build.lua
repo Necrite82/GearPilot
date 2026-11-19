@@ -77,6 +77,20 @@ local function walk(node, inst)
     for _, child in ipairs(node.t.groups or node.t) do walk(child, inst) end
 end
 
+-- Quests anywhere below an instance (ATT lists the dungeon quests under a QUESTS header).
+local function quests(node, out, seen, depth)
+    if type(node) ~= "table" or depth > 40 then return out end
+    if node.kind == "q" and type(node.id) == "number" and not seen[node.id] then
+        seen[node.id] = true
+        out[#out + 1] = node.id
+    end
+    local t = rawget(node, "t")
+    if type(t) == "table" then
+        for _, child in ipairs(t.groups or t) do quests(child, out, seen, depth + 1) end
+    end
+    return out
+end
+
 -- Names from the comments behind instanceroot(...) and e(...), n(...): "-- The Drowned City".
 local function names(text)
     local instance = text:match("instanceroot%(%d+,%s*{%s*%-%-%s*([^\r\n]+)")
@@ -112,6 +126,8 @@ for _, file in ipairs(files) do
         local inst = { id = root.id, name = instanceName or file:gsub("%.lua$", ""), level = t.lvl, raid = t.isRaid and true or nil,
             area = t.zoneTextAreaID, entrance = entrance, bosses = {} }
         walk(root, inst)
+        inst.quests = quests(root, {}, {}, 0)
+        table.sort(inst.quests)
         for _, boss in ipairs(inst.bosses) do
             boss.name = bossNames[(boss.encounter and ("e" .. boss.encounter)) or ("n" .. boss.npcs[#boss.npcs])]
         end
@@ -131,13 +147,14 @@ local lines = {
     "  source = " .. q("AllTheThings " .. commit) .. ",",
     "  instances = {",
 }
-local bossCount, itemCount = 0, 0
+local bossCount, itemCount, questCount = 0, 0, 0
 for _, inst in ipairs(instances) do
     local head = { "id = " .. inst.id, "name = " .. q(inst.name) }
     if inst.level then head[#head + 1] = "level = " .. inst.level end
     if inst.raid then head[#head + 1] = "raid = true" end
     if inst.area then head[#head + 1] = "area = " .. inst.area end
     if inst.entrance then head[#head + 1] = "entrance = " .. list(inst.entrance) end
+    if #inst.quests > 0 then head[#head + 1] = "quests = " .. list(inst.quests) end
     lines[#lines + 1] = "    { " .. table.concat(head, ", ") .. ", bosses = {"
     for _, boss in ipairs(inst.bosses) do
         bossCount, itemCount = bossCount + 1, itemCount + #boss.items
@@ -153,4 +170,5 @@ lines[#lines + 1] = "}"
 local f = assert(io.open(out, "wb"))
 f:write(table.concat(lines, "\n") .. "\n")
 f:close()
-print(("Dungeons.lua: %d instances, %d bosses, %d items"):format(#instances, bossCount, itemCount))
+for _, inst in ipairs(instances) do questCount = questCount + #inst.quests end
+print(("Dungeons.lua: %d instances, %d bosses, %d items, %d quests"):format(#instances, bossCount, itemCount, questCount))

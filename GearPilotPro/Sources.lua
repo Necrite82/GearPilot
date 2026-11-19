@@ -112,12 +112,24 @@ Sources.AttIndex = attIndex
 
 -- An ATT instance as a dungeon source: ForeverDB's area name where it has one (names group dungeons).
 -- Forever instance IDs are map IDs (the client names them in your language); Classic ones are journal IDs.
+-- Classic instance names in lower case -> map ID (ATT writes "Atal'hakkar", ForeverDB "Atal'Hakkar").
+local classicByName
+local function classicMap(name)
+    if not classicByName then
+        classicByName = {}
+        for map, instance in pairs(Sources.instances) do classicByName[instance[1]:lower()] = map end
+    end
+    return name and classicByName[name:lower()]
+end
 local function attDungeon(db, instance)
     local area = instance.area
     local entry = area and ((db.dng and db.dng[area]) or (db.area and db.area[area]))
     local forever = instance.id > 1000
-    return "a" .. (area or ("i" .. instance.id)), entry and entry[1] or instance.name, instance.raid == true,
-        forever, forever and instance.id or nil
+    local name = entry and entry[1] or instance.name
+    local map = classicMap(name)
+    if map then name = Sources.instances[map][1] end
+    return "a" .. (area or ("i" .. instance.id)), name, instance.raid == true or (map and Sources.instances[map][2] == true) or false,
+        forever, forever and instance.id or map
 end
 
 -- Where an NPC lives: a Forever dungeon (ForeverDB "ind"), a Classic instance map (spawn coordinates) or,
@@ -501,6 +513,97 @@ function Sources.Database()
     end
     Sources.state = "missing"
     return nil
+end
+
+-- Dungeon catalog: every dungeon and raid GearPilot knows, with its level range (bosses and drops), bosses and
+-- loot (AllTheThings), quests (AllTheThings and ForeverDB's dungeon zone) and the map ID for its local name.
+-- rows: Sources.Build rows (drops and dungeon quests add names and levels). Returns list and byName.
+function Sources.Catalog(db, data, rows)
+    local att = attIndex(data)
+    local list, byName = {}, {}
+    local function get(name)
+        local d = byName[name]
+        if not d then
+            d = { name = name, bosses = {}, quests = {}, questSeen = {} }
+            byName[name] = d
+            list[#list + 1] = d
+        end
+        return d
+    end
+    local function level(d, value)
+        if type(value) ~= "number" or value <= 0 then return end
+        d.low = math.min(d.low or value, value)
+        d.high = math.max(d.high or value, value)
+    end
+    local function quest(d, id)
+        if not d.questSeen[id] and db.quest and db.quest[id] then
+            d.questSeen[id] = true
+            d.quests[#d.quests + 1] = id
+        end
+    end
+    for _, instance in ipairs(type(data) == "table" and data.instances or {}) do
+        local _, name, raid, forever, mapID = attDungeon(db, instance)
+        local d = get(name)
+        d.raid, d.forever, d.mapID, d.area = raid, forever, d.mapID or mapID, instance.area
+        d.recommended = instance.level
+        for _, boss in ipairs(instance.bosses or {}) do
+            d.bosses[#d.bosses + 1] = { name = bossName(db, boss.npcs[1], boss), npcs = boss.npcs, items = boss.items, rare = boss.rare }
+            for _, npcID in ipairs(boss.npcs or {}) do
+                local npc = db.npc and db.npc[npcID]
+                -- Boss levels; very low ones (summoned helpers) are ignored.
+                local minLv, maxLv = npc and npc[3], npc and (npc[4] or npc[3])
+                if type(minLv) == "number" and minLv >= (instance.level or 1) - 5 then level(d, minLv); level(d, maxLv) end
+            end
+        end
+        for _, id in ipairs(instance.quests or {}) do quest(d, id) end
+    end
+    for _, row in ipairs(rows or {}) do
+        if row.source == "Dungeons" then
+            local d = get(row.name)
+            d.mapID = d.mapID or row.mapID
+            d.raid = d.raid or row.raid
+            d.forever = d.forever or row.forever
+            level(d, row.level)
+        elseif row.source == "Quests" and row.dungeonQuest and byName[row.dungeonQuest] then
+            quest(byName[row.dungeonQuest], row.sourceID)
+        end
+    end
+    for id, detail in pairs(db.qx or {}) do
+        local zone = type(detail[11]) == "number" and db.dng and db.dng[detail[11]]
+        if zone and byName[zone[1]] then quest(byName[zone[1]], id) end
+    end
+    for _, d in ipairs(list) do
+        d.mapID = d.mapID or classicMap(d.name)
+        if d.recommended then
+            d.low = d.low and math.max(d.low, d.recommended) or d.recommended
+            d.high = math.max(d.high or d.low, d.low)
+        end
+        d.low, d.high = d.low or 1, d.high or d.low or 1
+        d.questSeen = nil
+        table.sort(d.quests)
+    end
+    table.sort(list, function(a, b)
+        if a.low ~= b.low then return a.low < b.low end
+        return a.name < b.name
+    end)
+    return list, byName
+end
+
+-- One quest of a dungeon for the player: title, levels, giver, faction check; nil when the quest is not for
+-- this character (race, class) or a Classic quest replaced by its Forever twin in the same list.
+function Sources.DungeonQuest(db, questID, options, others)
+    local quest = db.quest and db.quest[questID]
+    if not quest then return nil end
+    local detail = db.qx and db.qx[questID] or {}
+    if not Sources.RaceAllowed(detail[1], options.raceBit, options.faction) or not Sources.ClassAllowed(detail[2], options.class) then
+        return nil
+    end
+    for _, other in ipairs(others or {}) do
+        if other ~= questID and replaced(db, questID, other) then return nil end
+    end
+    local giver = db.qg and db.qg[questID] and db.qg[questID][1]
+    return { id = questID, title = quest[1], level = quest[2], minLevel = quest[3], giverRef = giver,
+        giver = npcName(db, giver), prerequisites = (detail[3] or detail[4]) and true or false }
 end
 
 function Sources.Rows(class, faction, minChance, raceBit)

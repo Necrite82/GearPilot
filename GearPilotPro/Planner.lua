@@ -233,7 +233,8 @@ end
 
 -- candidates: { key, source, level?, choiceGroup?, item = {id, link, equip, minLevel, classID, subclassID, stats} }
 -- options: { level, below, above, profile, class }
--- options: { level, below, above, profile, class, slotAllowed (optional: slot -> boolean) }
+-- options: { level, below, above, profile, class, slotAllowed (optional: slot -> boolean),
+--   windows (optional: source -> { low, high }, e.g. dungeons with their own range) }
 function Planner.Recommend(candidates, equipped, options)
     local low, high = Planner.Range(options.level, options.below, options.above)
     local results, groups = {}, {}
@@ -242,8 +243,11 @@ function Planner.Recommend(candidates, equipped, options)
         local slots = targetSlots[item.equip]
         local bag = entry.source == "Bags"
         local sourceLevel = entry.level or item.minLevel
-        local inRange = bag or (sourceLevel and sourceLevel >= low and sourceLevel <= high)
-        local targetLevel = bag and options.level or high
+        local window = options.windows and options.windows[entry.source]
+        local lo, hi = low, high
+        if window then lo, hi = window[1], window[2] end
+        local inRange = bag or (sourceLevel and sourceLevel >= lo and sourceLevel <= hi)
+        local targetLevel = bag and options.level or hi
         -- Proficiencies (mail and plate from level 40, dual wield) count from the level you can really wear the
         -- item: your level now, or its required level if that is higher. Never the top of the level range.
         local wearLevel = math.max(options.level, item.minLevel or options.level)

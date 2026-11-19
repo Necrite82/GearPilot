@@ -81,8 +81,8 @@ local de = {
     -- Help
     ["GearPilot scores every item with the values of your stat profile and compares it with what you wear in the same slot. The score gain is the difference."] =
         "GearPilot bewertet jeden Gegenstand mit den Werten deines Profils und vergleicht ihn mit dem, was du am selben Platz trägst. Der Punktegewinn ist der Unterschied.",
-    ["Best upgrades lists bag items, quest rewards and dungeon drops together. Quests and dungeons only count inside your level range; quests you have done are hidden."] =
-        "Beste Upgrades zeigt Taschen, Quest-Belohnungen und Dungeon-Beute zusammen. Quests und Dungeons zählen nur in deinem Stufenbereich; erledigte Quests sind ausgeblendet.",
+    ["Best upgrades lists bag items, quest rewards and dungeon drops together. Quests count inside your level range, dungeons inside the dungeon range; quests you have done are hidden."] =
+        "Beste Upgrades zeigt Taschen, Quest-Belohnungen und Dungeon-Beute zusammen. Quests zählen in deinem Stufenbereich, Dungeons im Dungeon-Bereich; erledigte Quests sind ausgeblendet.",
     ["Quest choice rewards: you can take one item per quest, so only the best one is shown."] =
         "Auswahlbelohnungen: Pro Quest gibt es nur einen Gegenstand, deshalb steht nur der beste in der Liste.",
     ["Limits"] = "Grenzen", ["Commands"] = "Befehle",
@@ -324,6 +324,36 @@ local de = {
     ["Data sources"] = "Datenquellen",
     ["Bosses and loot of the new Forever dungeons come from AllTheThings (MIT, github.com/ATTWoWAddon/AllTheThings)."] =
         "Bosse und Beute der neuen Forever-Dungeons stammen aus AllTheThings (MIT, github.com/ATTWoWAddon/AllTheThings).",
+    -- 1.0.2
+    ["To go"] = "To go", ["All dungeons"] = "Alle Dungeons", ["Only in range"] = "Nur im Bereich", ["Prepare all"] = "Alle vorbereiten",
+    ["Cloth"] = "Stoff", ["Leather"] = "Leder", ["Mail"] = "Schwere Rüstung", ["Plate"] = "Platte",
+    ["%d open quests"] = "%d offene Quests", ["%d runs"] = "%d Läufe", ["%d wishlist items"] = "%d Wunschteile",
+    ["+ To go"] = "+ To go", ["On to go list"] = "Auf To go",
+    ["A dungeon counts when its level range overlaps this range: from this many levels below to this many levels above your level. The other dungeons stay visible under Per dungeon, dimmed."] =
+        "Ein Dungeon zählt, wenn sich sein Stufenbereich mit diesem Bereich überschneidet: so viele Stufen unter bis so viele Stufen über deiner Stufe. Die anderen Dungeons bleiben unter „Pro Dungeon“ sichtbar, abgeschwächt.",
+    ["Collect quests (%d)"] = "Quests einsammeln (%d)", ["Dungeon range"] = "Dungeon-Bereich", ["Dungeons %d–%d"] = "Dungeons %d–%d",
+    ["Dungeons whose level range overlaps this range count for your upgrades. Set it in the settings."] =
+        "Dungeons, deren Stufenbereich diesen Bereich überschneidet, zählen für deine Upgrades. Einstellbar in den Einstellungen.",
+    ["Move down"] = "Nach unten", ["Move up"] = "Nach oben",
+    ["Nothing to prepare: every quest is done or in your quest log."] = "Nichts vorzubereiten: Alle Quests sind erledigt oder im Questlog.",
+    ["On your to go list: %d runs so far."] = "Auf deiner To-go-Liste: bisher %d Läufe.",
+    ["Open quests"] = "Offene Quests",
+    ["Quests and the other sources in this range are compared; dungeons have their own range. Bag items are always compared."] =
+        "Quests und die übrigen Quellen in diesem Bereich werden verglichen; Dungeons haben einen eigenen Bereich. Taschen zählen immer.",
+    ["Quests until they turn grey: also older quests that still give experience."] =
+        "Quests bis grau: auch ältere Quests, die noch Erfahrung geben.",
+    ["Quests, vendors, crafting and the auction house from this many levels below to this many levels above your level are compared. Dungeons have their own range below."] =
+        "Quests, Händler, Herstellen und Auktionshaus von so vielen Stufen unter bis so vielen Stufen über deiner Stufe werden verglichen. Dungeons haben unten einen eigenen Bereich.",
+    ["To go list: remove a dungeon by itself once its quests are done and its wishlist items received."] =
+        "To-go-Liste: Einen Dungeon von selbst entfernen, sobald seine Quests erledigt und seine Wunschteile da sind.",
+    ["To go: %s, run %d."] = "To go: %s, Lauf %d.", ["Waypoint to the entrance"] = "Wegpunkt zum Eingang",
+    ["Your to go list is empty. Open a dungeon under Per dungeon and add it with + To go."] =
+        "Deine To-go-Liste ist leer. Öffne einen Dungeon unter „Pro Dungeon“ und füge ihn mit „+ To go“ hinzu.",
+    ["chain %d of %d"] = "Reihe %d von %d", ["in your range"] = "in deinem Bereich", ["outside your range"] = "außerhalb deines Bereichs",
+    ["Dungeon details: your upgrades and the expected gain of one run, every quest of the dungeon with its chain and best reward, and the loot of every boss (your upgrades bright, wishlist items marked). Dungeons outside your range stay visible, dimmed."] =
+        "Dungeon-Details: deine Upgrades und der erwartete Gewinn eines Durchlaufs, alle Quests des Dungeons mit Questreihe und bester Belohnung und die Beute jedes Bosses (deine Upgrades hell, Wunschteile markiert). Dungeons außerhalb deines Bereichs bleiben sichtbar, abgeschwächt.",
+    ["To go: your own list of dungeons to run. Order it, collect every quest you need before the runs in one go (nearest first), and see how often you have been there."] =
+        "To go: deine eigene Liste von Dungeons. Ordne sie, sammle alle nötigen Quests vor den Läufen in einem Rutsch ein (nächste zuerst) und sieh, wie oft du dort warst.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key
