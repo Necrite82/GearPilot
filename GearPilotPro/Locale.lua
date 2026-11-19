@@ -363,7 +363,7 @@ local de = {
     ["Asked the server for quest %d. ForeverDB: %s."] = "Quest %d beim Server angefragt. ForeverDB: %s.",
     ["Explored only"] = "Nur Erkundetes", ["Whole map"] = "Ganze Karte",
     ["No answer from the server for quest %d: GearPilot uses ForeverDB's values."] = "Keine Antwort vom Server für Quest %d: GearPilot nutzt die Werte aus ForeverDB.",
-    ["Quest %d from the server: %s, money %s."] = "Quest %d vom Server: %s, Gold %s.",
+    ["Quest %d from the server: %s"] = "Quest %d vom Server: %s", ["no XP"] = "keine EP",
     ["Reward: "] = "Belohnung: ", ["Show all %d steps"] = "Alle %d Schritte zeigen", ["Show fewer steps"] = "Weniger Schritte zeigen",
     ["THOUSANDS_SEPARATOR"] = ".", ["The open quests give %s, pre-quests included."] = "Die offenen Quests geben %s, Vorquests mitgezählt.",
     ["XP"] = "EP", ["no value"] = "kein Wert",

@@ -128,13 +128,21 @@ events:SetScript("OnEvent", function(_, _, questID, success)
         if XP.waiting and XP.waiting[questID] then
             XP.waiting[questID] = nil
             if DEFAULT_CHAT_FRAME then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffe0b050GearPilot|r " .. (L("Quest %d from the server: %s, money %s."):format(questID,
-                    XP.Text(xp) or "-", GetCoinTextureString and GetCoinTextureString(money or 0) or tostring(money))))
+                DEFAULT_CHAT_FRAME:AddMessage("|cffe0b050GearPilot|r " .. XP.Answer(questID, xp, money))
             end
         end
         if GP.ScheduleRefresh then GP.ScheduleRefresh() end
     end
 end)
+
+-- "Quest 95775 from the server: 8,450 XP" (money only when there is some).
+function XP.Answer(questID, xp, money)
+    local text = (L("Quest %d from the server: %s"):format(questID, XP.Text(xp) or L("no XP")))
+    if money and money > 0 then
+        text = text .. ", " .. (GetCoinTextureString and GetCoinTextureString(money) or tostring(money))
+    end
+    return text .. "."
+end
 
 -- /gpp ep <questID>: test whether the server answers for a quest.
 function XP.Test(questID)
@@ -145,8 +153,7 @@ function XP.Test(questID)
     if xp or money then
         XP.waiting[questID] = nil
         cache()[questID] = { xp = xp, money = money, level = GP.Player().level }
-        say((L("Quest %d from the server: %s, money %s."):format(questID, XP.Text(xp) or "-",
-            GetCoinTextureString and GetCoinTextureString(money or 0) or tostring(money))))
+        say(XP.Answer(questID, xp, money))
         return
     end
     if C_QuestLog and C_QuestLog.RequestLoadQuestByID then C_QuestLog.RequestLoadQuestByID(questID) end
