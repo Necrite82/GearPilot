@@ -24,8 +24,8 @@ local function build()
     S.Text(f, "GameFontNormalLarge", 18, 18, 400, L("Own profile"))
     S.Text(f, "GameFontHighlightSmall", 18, 42, 520,
         L("Weight per point; crit, hit, dodge, parry and block per 1 %, weapon DPS per 1 DPS. 0 or empty = does not count."))
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -6, -6)
+    local close = S.Button(f, 26, 24, "x", function() f:Hide() end)
+    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -10)
     f.inputs = {}
     local columns, rowHeight = 2, 28
     for i, key in ipairs(KEYS) do

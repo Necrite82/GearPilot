@@ -394,6 +394,11 @@ local de = {
     -- 1.3.1
     ["(chain)"] = "(Reihe)", ["Gear on the way"] = "Ausrüstung auf dem Weg", ["from the follow-up quest "] = "aus der Folgequest ",
     ["reward of this quest"] = "Belohnung dieser Quest",
+    -- 1.3.6 quest info
+    ["Shift-click: link in chat"] = "Shift-Klick: im Chat verlinken", ["Right-click: share with your group"] = "Rechtsklick: mit der Gruppe teilen",
+    ["Only quests in your quest log can be shared."] = "Teilen geht nur mit Quests in deinem Questlog.",
+    ["You are not in a group."] = "Du bist in keiner Gruppe.", ["This quest cannot be shared."] = "Diese Quest kann nicht geteilt werden.",
+    ["Shared: %s"] = "Geteilt: %s",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key
