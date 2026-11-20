@@ -573,7 +573,35 @@ U.pageContent:SetSize(W - 36 - 32, 10)
 U.pageScroll:SetScrollChild(U.pageContent)
 
 -- Rows ------------------------------------------------------------------------------------------------------------
-local function row(i)
+local row, fillRow
+-- Fills the row frames with the list entries in view (U.listState from Render).
+local function drawRows()
+    local st = U.listState
+    if not st then return end
+    local offset = U.listScroll:GetVerticalScroll() or 0
+    local height = U.listScroll:GetHeight() or 400
+    if height < 46 then height = 600 end
+    local first = math.max(1, math.floor(offset / 46) + 1)
+    local last = math.min(#st.list, first + math.ceil(height / 46))
+    local used = 0
+    for i = first, last do
+        used = used + 1
+        local r, data = row(used), st.list[i]
+        r.key = data.key or data.entry.key
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", U.listContent, "TOPLEFT", 0, -(i - 1) * 46)
+        r:SetWidth(st.width)
+        local on = data == st.found
+        if on then r:SetBackdropColor(.16, .18, .22, 1) else r:SetBackdropColor(0, 0, 0, 0) end
+        r.stripe:SetShown(on)
+        fillRow(r, st.kind, data, st.width, st.list)
+        r:Show()
+    end
+    for j = used + 1, #U.rows do U.rows[j]:Hide() end
+end
+U.listScroll:HookScript("OnVerticalScroll", function() drawRows() end)
+U.listScroll:HookScript("OnSizeChanged", function() drawRows() end)
+function row(i)
     local r = U.rows[i]
     if r then return r end
     r = CreateFrame("Button", nil, U.listContent, "BackdropTemplate")
@@ -712,7 +740,6 @@ local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, 
         f.button:SetPoint("RIGHT", f, "RIGHT", -6, 0)
         f.map = S.Button(f, 60, 22, L("Map"), nil)
         f.map:SetPoint("RIGHT", f.button, "LEFT", -6, 0)
-        f.quest = GP.QuestInfo.Hotspot(f, f.icon)
         U.sourceLines[i] = f
     end
     indent = indent or 0
@@ -722,7 +749,9 @@ local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, 
     f:SetSize(width, 38)
     f:SetBackdropColor(.122, .141, .172, 1)
     f.icon:SetTexture(SOURCE_ICONS[kind] or SOURCE_ICONS.world)
-    GP.QuestInfo.Set(f.quest, questID, questTitle)
+    -- The quest hover only where a line is a quest (fewer frames for long loot lists).
+    if questID and not rawget(f, "quest") then f.quest = GP.QuestInfo.Hotspot(f, f.icon) end
+    GP.QuestInfo.Set(rawget(f, "quest"), questID, questTitle)
     local reserved = 160 + (mapCallback and 66 or 0)
     f.title:SetWidth(width - reserved)
     f.sub:SetWidth(width - reserved)
@@ -2565,7 +2594,7 @@ local function emptyMessage(page, kind, loading, states)
     return L("No upgrades in this selection. Try a wider level range in the settings.")
 end
 
-local function fillRow(r, kind, data, width, list)
+function fillRow(r, kind, data, width, list)
     local item = data.item
     r.link = item and item.link
     GP.QuestInfo.Set(r.quest, nil)
@@ -2816,20 +2845,14 @@ function GP.Render()
         found = list[1]
         GP.selected[selectKey] = found and (found.key or found.entry.key) or nil
     end
-    for _, r in ipairs(U.rows) do r:Hide() end
-    for i, data in ipairs(list) do
-        local r = row(i)
-        r.key = data.key or data.entry.key
-        r:ClearAllPoints()
-        r:SetPoint("TOPLEFT", U.listContent, "TOPLEFT", 0, -(i - 1) * 46)
-        r:SetWidth(width)
-        local on = data == found
-        if on then r:SetBackdropColor(.16, .18, .22, 1) else r:SetBackdropColor(0, 0, 0, 0) end
-        r.stripe:SetShown(on)
-        fillRow(r, kind, data, width, list)
-        r:Show()
-    end
+    -- 1.6.2: only the visible rows exist (plus one); scrolling fills them with the entries now in view. Long lists
+    -- used to build one row per entry (hundreds of frames).
+    U.listState = { list = list, kind = kind, found = found, width = width }
     U.listContent:SetHeight(math.max(10, #list * 46))
+    if (U.listScroll:GetVerticalScroll() or 0) > math.max(0, #list * 46 - (U.listScroll:GetHeight() or 0)) then
+        U.listScroll:SetVerticalScroll(0)
+    end
+    drawRows()
     U.empty:SetWidth(listW - 28)
     if #list == 0 then
         U.empty:SetText(emptyMessage(page, kind, loading, states))
@@ -2901,7 +2924,30 @@ function GP.Toggle()
     if frame:IsShown() then frame:Hide() else GP.Open() end
 end
 
-frame:SetScript("OnHide", function() U.profileMenu:Hide(); U.slotMenu:Hide(); GP.chainOpen = {} end)
+-- 1.6.2: after two minutes with the window closed, the big lists are let go (item rows, dungeon catalog, BIS,
+-- stat cache): a few MB less while you play. Opening the window builds them again (a fraction of a second).
+local closedAt = 0
+function GP.ReleaseCaches()
+    GP.Sources.rows, GP.Sources.signature = nil, nil
+    GP.catalogList, GP.catalogByName, GP.catalogRows = nil, nil, nil
+    GP.craftedRows, GP.equipIndex = nil, nil
+    bisCache = {}
+    U.listState = nil
+    GP.Stats.ClearCache()
+    -- The route keeps its own rewards built from those rows: let them go too (built again on its next update).
+    GP.QuestRoute.own = nil
+    GP.QuestRoute.Invalidate()
+end
+frame:SetScript("OnHide", function()
+    U.profileMenu:Hide(); U.slotMenu:Hide(); GP.chainOpen = {}
+    local at = (GetTime and GetTime()) or 0
+    closedAt = at
+    if C_Timer then
+        C_Timer.After(120, function()
+            if not frame:IsShown() and closedAt == at then GP.ReleaseCaches() end
+        end)
+    end
+end)
 frame:SetScript("OnSizeChanged", function() if GP.ScheduleRefresh then GP.ScheduleRefresh() end end)
 -- Saved position and size.
 function GP.RestoreWindow()

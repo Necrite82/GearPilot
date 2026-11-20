@@ -145,7 +145,7 @@ local db = {
 local rows = S.Build(db, { class = "WARRIOR", faction = "Horde", minChance = 0.02 })
 local byItem = {}
 for _, r in ipairs(rows) do byItem[r.itemID] = r end
-assert(byItem[100] and byItem[100].choiceGroup == "q1" and byItem[100].giver == "Giver" and byItem[100].prerequisites[1] == 9)
+assert(byItem[100] and byItem[100].choiceGroup == "q1" and byItem[100].giver == "Giver")
 assert(not byItem[101], "Alliance quest hidden for Horde")
 assert(not byItem[105], "shirts are not scored")
 assert(byItem[102] and byItem[102].name == "The Deadmines" and byItem[102].chance == 0.2 and byItem[102].level == 21)

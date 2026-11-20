@@ -58,8 +58,19 @@ function QI.LogText(questID)
     return readable(story) and story ~= "" and story or nil, readable(objectives) and objectives ~= "" and objectives or nil
 end
 
+-- Objectives are asked many times a second (route, tracker); the answer is kept for half a second.
+local objectiveCache, objectiveTime = {}, 0
 function QI.Objectives(questID)
     if not (C_QuestLog and C_QuestLog.GetQuestObjectives) then return {} end
+    local now = GetTime and GetTime() or 0
+    if now - objectiveTime > .5 then objectiveCache, objectiveTime = {}, now end
+    local cached = objectiveCache[questID]
+    if cached then return cached end
+    local result = QI.ReadObjectives(questID)
+    objectiveCache[questID] = result
+    return result
+end
+function QI.ReadObjectives(questID)
     local ok, list = pcall(C_QuestLog.GetQuestObjectives, questID)
     if not ok or type(list) ~= "table" then return {} end
     local result = {}

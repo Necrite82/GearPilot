@@ -256,14 +256,21 @@ function T.Toggle()
 end
 function T.IsShown() return frame:IsShown() end
 
--- Refresh every second while open (distance, progress) and after quest log changes.
-local elapsed = 0
+-- 1.6.2: drawn again right after quest log, bag or route changes, otherwise every 5 seconds for the distances
+-- (was every second: a steady stream of garbage while questing).
+local elapsed, dirty = 0, true
 frame:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
-    if elapsed < 1 then return end
-    elapsed = 0
+    if elapsed < (dirty and .5 or 5) then return end
+    elapsed, dirty = 0, false
     T.Refresh()
 end)
+local changes = CreateFrame("Frame")
+for _, event in ipairs({ "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN", "BAG_UPDATE_DELAYED",
+    "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA" }) do
+    changes:RegisterEvent(event)
+end
+changes:SetScript("OnEvent", function() dirty = true end)
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:SetScript("OnEvent", function()

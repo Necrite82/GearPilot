@@ -46,9 +46,14 @@ function QL.Max()
     end
     return type(MAX_QUESTS) == "number" and MAX_QUESTS or 40
 end
+-- Count and limit, kept until the quest log changes (the tracker asks often).
+local fullCache
 function QL.Full()
-    local count, max = #QL.Quests(), QL.Max()
-    return count >= max, count, max
+    if not fullCache then
+        local count, max = #QL.Quests(), QL.Max()
+        fullCache = { count >= max, count, max }
+    end
+    return fullCache[1], fullCache[2], fullCache[3]
 end
 
 -- Every quest in your log with a suggestion, worst to keep first:
@@ -170,7 +175,9 @@ events:RegisterEvent("QUEST_ACCEPTED")
 events:RegisterEvent("QUEST_REMOVED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 local pending = false
+events:RegisterEvent("QUEST_LOG_UPDATE")
 events:SetScript("OnEvent", function(_, event, first, second)
+    fullCache = nil
     -- QUEST_ACCEPTED gives (questID) or (log index, questID), depending on the client.
     local questID = type(second) == "number" and second or first
     if event == "QUEST_ACCEPTED" and type(questID) == "number" and GP.settings and later()[questID] then

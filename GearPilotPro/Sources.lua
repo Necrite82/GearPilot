@@ -225,19 +225,13 @@ function Sources.Build(db, options)
                             if fixed == itemID then choice = false end
                         end
                     end
-                    local prerequisites = {}
-                    for _, list in ipairs({detail[3], detail[4]}) do
-                        if type(list) == "table" then
-                            for _, id in ipairs(list) do prerequisites[#prerequisites + 1] = id end
-                        end
-                    end
                     local giver = db.qg and db.qg[questID] and db.qg[questID][1]
                     local zoneID = type(detail[11]) == "number" and detail[11] > 0 and detail[11] or nil
                     local zone = zoneID and db.area and db.area[zoneID]
                     local dungeon = zoneID and db.dng and db.dng[zoneID]
                     rows[#rows + 1] = {
                         itemID = itemID, source = "Quests", sourceID = questID, level = level, name = quest[1],
-                        minLevel = quest[3], faction = questFaction, prerequisites = prerequisites,
+                        minLevel = quest[3], faction = questFaction,
                         choiceGroup = choice and ("q" .. questID) or nil, giver = npcName(db, giver),
                         giverRef = giver, zone = zone and zone[1] or (dungeon and dungeon[1]) or nil,
                         dungeonQuest = dungeon and dungeon[1] or nil,
