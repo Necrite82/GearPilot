@@ -205,7 +205,7 @@ function T.Refresh()
         r:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -y)
         if current then r:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1) else r:SetBackdropColor(0, 0, 0, 0) end
         r.stripe:SetShown(current)
-        r.icon:SetTexture(ICONS[t.kind])
+        r.icon:SetTexture(t.buy and "Interface\\GossipFrame\\VendorGossipIcon" or ICONS[t.kind])
         r.name:SetText(("%d. %s"):format(index, QR.Title(t.quest)))
         local c = current and C.text or C.muted
         r.name:SetTextColor(c[1], c[2], c[3])

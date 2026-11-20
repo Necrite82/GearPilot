@@ -1731,11 +1731,13 @@ local function showRouteTask(data, profile, equipped)
     detailY = detailY + 60
     local uiMap, x, y = QR.MapPoint(t)
     local objectiveName = t.kind == "objective" and ((t.item and GP.ItemData(t.item).name) or t.label)
-    local place = objectiveName or (t.kind == "accept" and ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef))
+    local place = (t.buy and QR.VendorName(t)) or objectiveName or (t.kind == "accept" and ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef))
         or (ForeverDB and GP.Sources.GiverName(ForeverDB, q.enderRef))
     local zoneName = uiMap and GP.Sources.MapName(uiMap)
     if place then detailLine("GameFontHighlightSmall", L("Where: ") .. place .. (zoneName and (", " .. zoneName) or "")) end
-    if t.kind == "objective" then
+    if t.buy then
+        detailLine("GameFontDisableSmall", L("This item is sold by a vendor; the route moves on once you have enough of it."), C.muted)
+    elseif t.kind == "objective" then
         detailLine("GameFontDisableSmall", L("The route moves on when the quest is complete or when you reach this place."), C.muted)
     end
     actions({ L("Waypoint"), function()
@@ -2610,7 +2612,7 @@ local function fillRow(r, kind, data, width, list)
             local t = data.task
             local icons = { accept = "Interface\\GossipFrame\\AvailableQuestIcon", objective = "Interface\\Icons\\Ability_Hunter_SniperShot",
                 turnin = "Interface\\GossipFrame\\ActiveQuestIcon" }
-            r.icon:SetTexture(icons[t.kind])
+            r.icon:SetTexture(t.buy and "Interface\\GossipFrame\\VendorGossipIcon" or icons[t.kind])
             r.name:SetText(("%d. %s"):format(data.index, GP.QuestRoute.Title(t.quest)))
             GP.QuestInfo.Set(r.quest, t.quest.id, t.quest.title)
             local sub = { GP.QuestRoute.TaskText(t) }

@@ -399,6 +399,9 @@ local de = {
     ["Only quests in your quest log can be shared."] = "Teilen geht nur mit Quests in deinem Questlog.",
     ["You are not in a group."] = "Du bist in keiner Gruppe.", ["This quest cannot be shared."] = "Diese Quest kann nicht geteilt werden.",
     ["Shared: %s"] = "Geteilt: %s",
+    -- 1.6.0
+    ["Buy"] = "Kaufen", ["%d in bags"] = "%d im Gepäck", ["This item is sold by a vendor; the route moves on once you have enough of it."] =
+        "Diesen Gegenstand verkauft ein Händler; die Route geht weiter, sobald du genug davon hast.",
     -- 1.5.0 route control and quest log
     ["Choose quests"] = "Quests wählen", ["Quest log"] = "Questlog", ["Remembered"] = "Gemerkt", ["Skipped"] = "Übersprungen",
     ["Route from"] = "Route aus", ["Automatic"] = "Automatisch", ["My quests"] = "Meinen Quests", ["Escort quests"] = "Begleitquests",

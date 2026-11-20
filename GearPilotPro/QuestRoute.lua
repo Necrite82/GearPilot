@@ -62,6 +62,25 @@ local function spotVia(spawns, a, b)
 end
 QR.NearbySpawns, QR.SpotVia = nearbySpawns, spotVia
 
+-- Places of every vendor of your faction that sells an item: { continent, y, x, vendorID }.
+function QR.VendorSpots(db, itemID)
+    local out = {}
+    local vendors = db.vend and db.vend[itemID]
+    if type(vendors) ~= "table" then return out end
+    local faction = GP.Player and GP.Player().faction
+    for _, npcID in ipairs(vendors) do
+        local side = db.nfac and db.nfac[npcID]
+        local friendly = not side or not faction or side == "AH"
+            or (faction == "Alliance" and side == "A") or (faction == "Horde" and side == "H")
+        if friendly then
+            for _, s in ipairs(db.spw and db.spw["c" .. npcID] or {}) do
+                if type(s[2]) == "number" then out[#out + 1] = { s[1], s[2], s[3], npcID } end
+            end
+        end
+    end
+    return out
+end
+
 -- Objectives with a known place: creatures (qx[8]), objects (qx[9]) and items (qx[10], from who drops them).
 local function objectives(db, questID, near)
     local detail = db.qx and db.qx[questID] or {}
@@ -79,12 +98,23 @@ local function objectives(db, questID, near)
         add("o" .. objectID, object and object[1])
     end
     for _, itemID in ipairs(type(detail[10]) == "table" and detail[10] or {}) do
-        local drops = db.drop and db.drop[itemID] or {}
+        -- 1.6.0: an item a vendor of your faction sells is bought, not farmed: every vendor's place counts, the
+        -- route takes the one nearest to its way. The vendor's ID rides along as p[4].
+        local spots = QR.VendorSpots(db, itemID)
+        local item = db.item and db.item[itemID]
+        if #spots > 0 and #out < 4 then
+            local best, bestDistance
+            for _, p in ipairs(spots) do
+                local d = near and distance(near, p) or 0
+                if not best or d < bestDistance then best, bestDistance = p, d end
+            end
+            out[#out + 1] = { p = best, label = item and item[1], item = itemID, buy = true, spots = spots }
+        end
+        local drops = #spots == 0 and db.drop and db.drop[itemID] or {}
         local npcID, chance = nil, -1
         for i = 1, #drops, 2 do
             if (drops[i + 1] or 0) > chance then npcID, chance = drops[i], drops[i + 1] or 0 end
         end
-        local item = db.item and db.item[itemID]
         if npcID then add("c" .. npcID, item and item[1], itemID) end
     end
     return out
@@ -244,13 +274,16 @@ function QR.Order(quests, position, complete, rank)
         end
         if not (complete and complete(q.id)) then
             for _, o in ipairs(q.objectives) do
-                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item, npc = o.npc, ref = o.ref }
+                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item, npc = o.npc, ref = o.ref,
+                    buy = o.buy, spots = o.spots }
             end
         end
         tasks[#tasks + 1] = { kind = "turnin", quest = q, p = q.ender }
     end
     for _, t in ipairs(tasks) do
-        if t.kind == "objective" and t.ref then
+        if t.kind == "objective" and t.spots then
+            t.spawns = t.spots
+        elseif t.kind == "objective" and t.ref then
             t.spawns = nearbySpawns(db, t.ref, t.p)
             if #t.spawns == 0 then t.spawns = nil end
         end
@@ -580,9 +613,14 @@ function QR.TaskDone(t)
     if t.kind == "accept" then return onQuest(id) end
     if t.kind == "objective" then
         if complete(id) then return true end
+        if t.buy then
+            local have, need = QR.BuyProgress(t)
+            if need then return have >= need end
+        end
         -- 1.5.1: a quest in your log tells its progress; reaching the place only counts where it does not.
         local state = QR.ObjectiveState(t)
         if state ~= nil then return state end
+        if t.buy then return false end
         return t.reached == true or QR.reached[QR.TaskKey(t)] == true
     end
     return false
@@ -637,9 +675,38 @@ function QR.TaskText(t)
             local item = GP.ItemData(t.item)
             if item and item.name then label = item.name end
         end
+        if t.buy then
+            -- "Buy: Fine Spice 1/3 · Krinkle Goodsteel"
+            local have, need = QR.BuyProgress(t)
+            local count = need and ((" %d/%d"):format(math.min(have, need), need)) or (have > 0 and (" · " .. (L("%d in bags"):format(have))) or "")
+            local vendor = QR.VendorName(t)
+            return L("Buy") .. ": " .. (label or "?") .. count .. (vendor and (" · " .. vendor) or "")
+        end
         return L("Objective") .. (label and (": " .. label) or "")
     end
     return L("Turn in")
+end
+
+-- Bought quest items: how many you have and how many the quest wants (known once the quest is in your log).
+function QR.BuyProgress(t)
+    local have = GetItemCount and t.item and (GetItemCount(t.item) or 0) or 0
+    local need
+    local name = t.item and GP.ItemData and GP.ItemData(t.item).name
+    if GP.QuestInfo and name then
+        for _, o in ipairs(GP.QuestInfo.Objectives(t.quest.id)) do
+            if type(o.text) == "string" and o.text:find(name, 1, true) and type(o.numRequired) == "number" and o.numRequired > 0 then
+                need = o.numRequired
+                if type(o.numFulfilled) == "number" then have = math.max(have, o.numFulfilled) end
+            end
+        end
+    end
+    return have, need
+end
+function QR.VendorName(t)
+    local npcID = t.p and t.p[4]
+    if not npcID then return nil end
+    local db = ForeverDB
+    return (GP.Names and GP.Names.Get(npcID)) or (db and db.npc and db.npc[npcID] and db.npc[npcID][1]) or nil
 end
 
 -- Follow: waypoint to the next open task; moves on when a quest is accepted, completed or turned in, and when
@@ -714,14 +781,15 @@ end
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA",
-    "PLAYER_EQUIPMENT_CHANGED", "ITEM_DATA_LOAD_RESULT" }) do
+    "PLAYER_EQUIPMENT_CHANGED", "ITEM_DATA_LOAD_RESULT", "BAG_UPDATE_DELAYED" }) do
     events:RegisterEvent(event)
 end
 local pendingUpdate = false
 events:SetScript("OnEvent", function(_, event)
     if event == "ITEM_DATA_LOAD_RESULT" and not QR.loading then return end
     if event == "ITEM_DATA_LOAD_RESULT" or event == "PLAYER_LEVEL_UP" or event == "PLAYER_EQUIPMENT_CHANGED" then QR.own = nil end
-    QR.Invalidate()
+    -- Bags: a bought quest item finishes its step; the plan itself stays.
+    if event ~= "BAG_UPDATE_DELAYED" then QR.Invalidate() end
     if pendingUpdate or not C_Timer then return end
     pendingUpdate = true
     C_Timer.After(0.6, function()
@@ -740,7 +808,7 @@ events:SetScript("OnUpdate", function(_, delta)
     if elapsed < 1 or not QR.following then return end
     elapsed = 0
     local t = QR.current
-    if t and t.kind == "objective" and not t.reached then
+    if t and t.kind == "objective" and not t.reached and not t.buy then
         local here = QR.Position()
         if here and distance(here, t.p) < 40 then
             t.reached = true
