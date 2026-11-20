@@ -399,6 +399,13 @@ local de = {
     ["Only quests in your quest log can be shared."] = "Teilen geht nur mit Quests in deinem Questlog.",
     ["You are not in a group."] = "Du bist in keiner Gruppe.", ["This quest cannot be shared."] = "Diese Quest kann nicht geteilt werden.",
     ["Shared: %s"] = "Geteilt: %s",
+    -- 1.6.3 memory check
+    ["Memory check is already running."] = "Speichermessung läuft bereits.",
+    ["Memory check runs for %d seconds – just keep playing."] = "Speichermessung läuft %d Sekunden – spiel ganz normal weiter.",
+    ["Memory check: GearPilot from %.1f to %.1f MB in %d seconds (WoW cleans up in between). Biggest causes (sub-calls included):"] =
+        "Speichermessung: GearPilot von %.1f auf %.1f MB in %d Sekunden (WoW räumt zwischendurch auf). Größte Verursacher (inkl. Unteraufrufe):",
+    ["Memory check over %d seconds. Biggest causes (sub-calls included):"] = "Speichermessung über %d Sekunden. Größte Verursacher (inkl. Unteraufrufe):",
+    ["calls"] = "Aufrufe", ["Redraws started by: "] = "Neuzeichnen ausgelöst von: ", ["Events: "] = "Ereignisse: ",
     -- 1.6.1 raids and access
     ["Raids"] = "Raids", ["WoW Forever"] = "WoW Forever", ["All raids"] = "Alle Raids",
     ["Raids, their loot for you and the quests to get in"] = "Raids, ihre Beute für dich und die Quests für den Zugang",

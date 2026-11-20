@@ -73,6 +73,7 @@ Our Discord **Pilot Addons** has a bug forum for every addon – no GitHub accou
 | `/gpp` | Open or close GearPilot |
 | `/gpp tracker` | Show or hide the quest route tracker |
 | `/gpp ep <quest ID>` | Ask the server for a quest's experience |
+| `/gpp speicher` | 60-second memory check: what in GearPilot uses how much |
 
 ## 📦 Requirements
 | Addon | | What for |
@@ -168,6 +169,7 @@ Auf unserem Discord **Pilot Addons** hat jedes Addon ein eigenes Fehler-Forum �
 | `/gpp` | GearPilot öffnen oder schließen |
 | `/gpp tracker` | Tracker der Questroute ein- oder ausblenden |
 | `/gpp ep <Quest-ID>` | Die EP einer Quest beim Server anfragen |
+| `/gpp speicher` | 60-Sekunden-Speichermessung: was in GearPilot wie viel braucht |
 
 ## 📦 Voraussetzungen
 | Addon | | Wofür |

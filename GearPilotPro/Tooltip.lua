@@ -16,25 +16,44 @@ local function format(result)
     return DOWN .. " " .. (L("%d %% worse"):format(value)), .92, .47, .42
 end
 
-local function annotate(tooltip, link)
-    if not (GP.settings and GP.settings.tooltip ~= false and link) then return end
+-- 1.6.3: the line of an item is worked out once and kept until your gear, level, talents or profile change
+-- (a tooltip is drawn again and again while you hover over an item).
+local lines = {}
+function GP.TooltipChanged() lines = {} end
+function GP.TooltipLine(link)
+    local cached = lines[link]
+    if cached then return cached end
     local item = GP.ItemData(link)
-    if not item or not item.name then return end
+    if not item or not item.name then return nil end
     local player = GP.Player()
     local profile = GP.ActiveProfile()
     local result = P.Compare(item, GP.ReadGear(), profile, player.class, player.level)
-    if not result then return end
+    if not result then return nil end
+    local entry
     if result.usable == false then
-        tooltip:AddDoubleLine("GearPilot", L("not usable for your class"), .88, .69, .31, .62, .64, .68)
+        entry = { left = "GearPilot", text = L("not usable for your class"), r = .62, g = .64, b = .68 }
     else
         local text, r, g, b = format(result)
-        if not text then return end
-        tooltip:AddDoubleLine("GearPilot · " .. L(profile.name), text, .88, .69, .31, r, g, b)
-        local note = not result.worn and GP.Skills.Note(item)
-        if note then tooltip:AddLine(note, .92, .66, .35, true) end
+        if text then
+            entry = { left = "GearPilot · " .. L(profile.name), text = text, r = r, g = g, b = b,
+                note = not result.worn and GP.Skills.Note(item) or nil }
+        else
+            entry = { none = true }
+        end
     end
+    entry.id = item.id
+    lines[link] = entry
+    return entry
+end
+local function annotate(tooltip, link)
+    if not (GP.settings and GP.settings.tooltip ~= false and link) then return end
+    local entry = GP.TooltipLine(link)
+    if not entry or entry.none then return end
+    tooltip:AddDoubleLine(entry.left, entry.text, .88, .69, .31, entry.r, entry.g, entry.b)
+    if entry.note then tooltip:AddLine(entry.note, .92, .66, .35, true) end
     if GP.Wish and GP.Wish.Has(link) then
-        tooltip:AddLine(L("On your wishlist") .. (GP.Wish.List()[item.id] and GP.Wish.List()[item.id].goal and (" · " .. L("goal")) or ""), .88, .69, .31)
+        local wish = GP.Wish.List()[entry.id]
+        tooltip:AddLine(L("On your wishlist") .. (wish and wish.goal and (" · " .. L("goal")) or ""), .88, .69, .31)
     end
     tooltip:Show()
 end

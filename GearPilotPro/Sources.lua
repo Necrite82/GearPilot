@@ -624,8 +624,12 @@ function Sources.DungeonQuest(db, questID, options, others)
 end
 
 function Sources.Rows(class, faction, minChance, raceBit)
-    local signature = table.concat({ class or "", faction or "", tostring(minChance), tostring(raceBit) }, ":")
-    if Sources.rows and Sources.signature == signature then return Sources.rows end
+    -- Compared field by field (1.6.3: building a signature string on every call made garbage).
+    local last = Sources.signature
+    if Sources.rows and last and last[1] == class and last[2] == faction and last[3] == minChance and last[4] == raceBit then
+        return Sources.rows
+    end
+    local signature = { class, faction, minChance, raceBit }
     local db = Sources.Database()
     if not db then return nil end
     Sources.rows = Sources.Build(db, { class = class, faction = faction, minChance = minChance, raceBit = raceBit,

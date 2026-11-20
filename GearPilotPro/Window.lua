@@ -2766,6 +2766,8 @@ end
 
 function GP.Render()
     if not frame:IsShown() or not GP.settings then return end
+    -- Profile or settings may have changed: tooltip lines are worked out again.
+    if GP.TooltipChanged then GP.TooltipChanged() end
     local s = GP.settings
     local page = s.page
     local player = GP.Player()
