@@ -12,6 +12,7 @@ GP.QuestRoute = QR
 -- How much one score point of an upgrade is worth in experience, by focus.
 QR.focus = { xp = 0, balanced = 100, gear = 400 }
 QR.MAX_QUESTS = 20
+QR.DETOUR_MIN, QR.DETOUR_SHARE = 60, 0.3 -- yards / share of the way a task "on the way" may add
 QR.OTHER_CONTINENT = 8000 -- yards a continent change counts as
 
 local function distance(a, b)
@@ -35,6 +36,31 @@ local function spot(db, ref, near)
     return best
 end
 QR.Spot = spot
+-- Spawns of a target near its first spot (at most 25, so ordering stays quick), and among them the one that
+-- adds the least to the way from a to b (a creature on the way instead of the one at the giver).
+local function nearbySpawns(db, ref, around)
+    local spawns = type(ref) == "string" and db and db.spw and db.spw[ref]
+    local list = {}
+    for _, s in ipairs(spawns or {}) do
+        if type(s[2]) == "number" then
+            local p = { s[1], s[2], s[3] }
+            if not around or p[1] == around[1] then list[#list + 1] = { p = p, d = around and distance(around, p) or 0 } end
+        end
+    end
+    table.sort(list, function(x, y) return x.d < y.d end)
+    local out = {}
+    for i = 1, math.min(25, #list) do out[i] = list[i].p end
+    return out
+end
+local function spotVia(spawns, a, b)
+    local best, bestCost
+    for _, p in ipairs(spawns) do
+        local cost = distance(a, p) + (b and distance(p, b) or 0)
+        if not best or cost < bestCost then best, bestCost = p, cost end
+    end
+    return best
+end
+QR.NearbySpawns, QR.SpotVia = nearbySpawns, spotVia
 
 -- Objectives with a known place: creatures (qx[8]), objects (qx[9]) and items (qx[10], from who drops them).
 local function objectives(db, questID, near)
@@ -42,7 +68,7 @@ local function objectives(db, questID, near)
     local out = {}
     local function add(ref, label, itemID, npcID)
         local p = spot(db, ref, near)
-        if p and #out < 4 then out[#out + 1] = { p = p, label = label, item = itemID, npc = npcID } end
+        if p and #out < 4 then out[#out + 1] = { p = p, label = label, item = itemID, npc = npcID, ref = ref } end
     end
     for _, npcID in ipairs(type(detail[8]) == "table" and detail[8] or {}) do
         local npc = db.npc and db.npc[npcID]
@@ -198,6 +224,7 @@ end
 -- A quest whose objectives are unknown and that you turn in where you took it is probably "go and do something":
 -- its turn-in waits until the rest of the zone is done (or until the game says the quest is complete).
 function QR.Order(quests, position, complete)
+    local db = ForeverDB
     local tasks = {}
     for _, q in ipairs(quests) do
         local accepted = q.active
@@ -206,10 +233,16 @@ function QR.Order(quests, position, complete)
         end
         if not (complete and complete(q.id)) then
             for _, o in ipairs(q.objectives) do
-                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item, npc = o.npc }
+                tasks[#tasks + 1] = { kind = "objective", quest = q, p = o.p, label = o.label, item = o.item, npc = o.npc, ref = o.ref }
             end
         end
         tasks[#tasks + 1] = { kind = "turnin", quest = q, p = q.ender }
+    end
+    for _, t in ipairs(tasks) do
+        if t.kind == "objective" and t.ref then
+            t.spawns = nearbySpawns(db, t.ref, t.p)
+            if #t.spawns == 0 then t.spawns = nil end
+        end
     end
     -- Ready: accept always; objectives once the quest is accepted; turn-in once its objectives are done.
     local accepted, open = {}, {}
@@ -233,20 +266,41 @@ function QR.Order(quests, position, complete)
         return false
     end
     for _ = 1, #tasks do
-        local pick, pickDistance
+        local pick, pickDistance, pickPoint
         for i, t in ipairs(tasks) do
             if not used[i] then
                 local ready = t.kind == "accept" or (t.kind == "objective" and accepted[t.quest.id])
                     or (t.kind == "turnin" and accepted[t.quest.id] and open[t.quest.id] == 0
                         and not (deferred[t.quest.id] and others(i)))
                 if ready then
-                    local d = distance(here, t.p)
-                    if not pick or d < pickDistance then pick, pickDistance = i, d end
+                    -- Objectives: the spawn nearest to where you are now, not the one next to the giver.
+                    local p = t.spawns and spotVia(t.spawns, here) or t.p
+                    local d = distance(here, p)
+                    if not pick or d < pickDistance then pick, pickDistance, pickPoint = i, d, p end
                 end
             end
         end
         if not pick then break end
+        -- 1.4.0: objectives and turn-ins of quests you already have that lie on the way to that step come first,
+        -- so you do them in passing instead of walking past them.
+        local share = GP.settings and GP.settings.routeDetour or QR.DETOUR_SHARE
+        local limit = share > 0 and math.max(QR.DETOUR_MIN, pickDistance * share) or -1
+        local onWay, onWayDistance, onWayPoint
+        for i, t in ipairs(tasks) do
+            if not used[i] and i ~= pick and t.p and (t.kind == "objective" or t.kind == "turnin") then
+                local ready = accepted[t.quest.id] and (t.kind == "objective" or (open[t.quest.id] == 0
+                    and not (deferred[t.quest.id] and others(i))))
+                if ready then
+                    local p = t.spawns and spotVia(t.spawns, here, pickPoint) or t.p
+                    local d = distance(here, p)
+                    local detour = d + distance(p, pickPoint) - pickDistance
+                    if detour <= limit and (not onWay or d < onWayDistance) then onWay, onWayDistance, onWayPoint = i, d, p end
+                end
+            end
+        end
+        if onWay then pick, pickPoint = onWay, onWayPoint end
         local t = tasks[pick]
+        t.p = pickPoint or t.p
         used[pick] = true
         ordered[#ordered + 1] = t
         here = t.p or here
@@ -387,11 +441,17 @@ end
 function QR.Invalidate() QR.plan = nil end
 
 -- A task is done when its quest moved past it.
+-- A task keeps its key when the plan is built again (new tables after every quest log update).
+function QR.TaskKey(t)
+    if not t then return nil end
+    return t.kind .. ":" .. t.quest.id .. ":" .. tostring(t.item or t.npc or t.label or "")
+end
+QR.reached = {}
 function QR.TaskDone(t)
     local id = t.quest.id
     if GP.Sources.QuestDone(id) then return true end
     if t.kind == "accept" then return onQuest(id) end
-    if t.kind == "objective" then return complete(id) or t.reached == true end
+    if t.kind == "objective" then return complete(id) or t.reached == true or QR.reached[QR.TaskKey(t)] == true end
     return false
 end
 
@@ -459,25 +519,50 @@ function QR.NextTask()
     end
     return nil
 end
-function QR.Follow(on)
+-- 1.4.0: the route's previous TomTom point goes when the next step starts (or the route stops); the game's own
+-- waypoint is replaced anyway.
+function QR.ClearTomTom()
+    if QR.tomtom and type(TomTom) == "table" and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, QR.tomtom) end
+    QR.tomtom = nil
+end
+function QR.Follow(on, force)
     QR.following = on
-    if not on then return end
+    if not on or force then QR.currentKey = nil end
+    if GP.Tracker and GP.Tracker.Refresh then GP.Tracker.Refresh() end
+    if not on then
+        QR.ClearTomTom()
+        if QR.ownWaypoint and C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
+        QR.ownWaypoint = false
+        return
+    end
     local t, i = QR.NextTask()
     if not t then
         say(L("Quest route: nothing left here. Open the route for the next zone."))
+        QR.ClearTomTom()
         QR.following = false
         return
     end
+    -- 1.4.0: only a new step sets the waypoint and writes to the chat (the plan is rebuilt on every quest log
+    -- update, which used to repeat the same line again and again).
+    local key = QR.TaskKey(t)
+    local changed = key ~= QR.currentKey
+    QR.current, QR.currentKey = t, key
+    if not changed then return end
     local uiMap, x, y = QR.MapPoint(t)
-    QR.current = t
     if uiMap and x and C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
         C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(uiMap, x, y))
+        QR.ownWaypoint = true
         if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
     end
+    QR.ClearTomTom()
     if type(TomTom) == "table" and TomTom.AddWaypoint and uiMap and x then
-        pcall(TomTom.AddWaypoint, TomTom, uiMap, x, y, { title = QR.Title(t.quest) .. " · " .. QR.TaskText(t), from = "GearPilot", persistent = false })
+        local ok, uid = pcall(TomTom.AddWaypoint, TomTom, uiMap, x, y, { title = QR.Title(t.quest) .. " · " .. QR.TaskText(t), from = "GearPilot", persistent = false })
+        if ok then QR.tomtom = uid end
     end
-    say((L("Quest route %d of %d: "):format(i, #QR.Current().tasks)) .. QR.Title(t.quest) .. " · " .. QR.TaskText(t))
+    -- With the tracker open the step is there already; the chat line is only for players without it.
+    if not (GP.Tracker and GP.Tracker.IsShown()) then
+        say((L("Quest route %d of %d: "):format(i, #QR.Current().tasks)) .. QR.Title(t.quest) .. " · " .. QR.TaskText(t))
+    end
 end
 
 local events = CreateFrame("Frame")
@@ -496,7 +581,7 @@ events:SetScript("OnEvent", function(_, event)
         pendingUpdate = false
         if QR.following then
             local t = QR.NextTask()
-            if t ~= QR.current then QR.Follow(true) end
+            if QR.TaskKey(t) ~= QR.currentKey then QR.Follow(true) end
         end
         if GP.ScheduleRefresh then GP.ScheduleRefresh() end
     end)
@@ -512,6 +597,7 @@ events:SetScript("OnUpdate", function(_, delta)
         local here = QR.Position()
         if here and distance(here, t.p) < 40 then
             t.reached = true
+            QR.reached[QR.TaskKey(t)] = true
             QR.Follow(true)
         end
     end

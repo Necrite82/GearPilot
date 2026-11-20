@@ -159,6 +159,7 @@ local function initialize()
     if saved.autoProfile == nil then saved.autoProfile = true end
     if saved.rewardHelp == nil then saved.rewardHelp = true end
     if saved.rollHelp == nil then saved.rollHelp = true end
+    if type(saved.routeDetour) ~= "number" or saved.routeDetour < 0 or saved.routeDetour > 1 then saved.routeDetour = 0.3 end
     saved.include = type(saved.include) == "table" and saved.include or {}
     for _, key in ipairs({ "Vendors", "Auction", "Crafted" }) do
         if saved.include[key] == nil then saved.include[key] = true end
@@ -359,6 +360,10 @@ SlashCmdList.GEARPILOTPRO = function(text)
     command = (command or ""):lower()
     if (command == "ep" or command == "xp") and tonumber(rest) then
         GP.QuestXP.Test(tonumber(rest))
+        return
+    end
+    if command == "tracker" or command == "route" then
+        GP.Tracker.Toggle()
         return
     end
     if GP.Toggle then GP.Toggle() end

@@ -18,6 +18,8 @@ Our Discord **Pilot Addons** has a bug forum for every addon – no GitHub accou
 - **The right zone:** the one that pays most for the way there, with the nearest flight point of your faction and the zone after it.
 - **Step by step:** accept, objectives, turn in – nearest first. "Go" sets the waypoint and moves on by itself.
 - **Grows with you:** new quests come in after every level, grey ones go, and when a zone runs dry the next one comes.
+- **Tracker:** a small window to leave open – current step with your progress, the next steps with distance and experience.
+- **Quest info on hover:** objectives, quest text and experience; Shift-click links a quest in chat, right-click shares it.
 
 ### Upgrades
 - **Best upgrades** from bags, quests and dungeons together – vendors, auction house and crafting on request.
@@ -62,6 +64,7 @@ Our Discord **Pilot Addons** has a bug forum for every addon – no GitHub accou
 | Command | What it does |
 |---|---|
 | `/gpp` | Open or close GearPilot |
+| `/gpp tracker` | Show or hide the quest route tracker |
 | `/gpp ep <quest ID>` | Ask the server for a quest's experience |
 
 ## 📦 Requirements
@@ -103,6 +106,8 @@ Auf unserem Discord **Pilot Addons** hat jedes Addon ein eigenes Fehler-Forum �
 - **Das richtige Gebiet:** das, das sich mit dem Weg dorthin am meisten lohnt, mit nächstem Flugpunkt deiner Fraktion und dem Gebiet danach.
 - **Schritt für Schritt:** annehmen, Ziele, abgeben – das Nächste zuerst. „Los“ setzt den Wegpunkt und rückt von selbst weiter.
 - **Wächst mit:** nach jeder Stufe kommen neue Quests dazu, graue fallen weg, und ist ein Gebiet ausgeschöpft, kommt das nächste.
+- **Tracker:** ein kleines Fenster zum Offenlassen – aktueller Schritt mit Fortschritt, die nächsten Schritte mit Entfernung und EP.
+- **Questinfo beim Überfahren:** Ziele, Questtext und EP; Shift-Klick verlinkt eine Quest im Chat, Rechtsklick teilt sie.
 
 ### Upgrades
 - **Beste Upgrades** aus Taschen, Quests und Dungeons zusammen – Händler, Auktionshaus und Handwerk auf Wunsch.
@@ -147,6 +152,7 @@ Auf unserem Discord **Pilot Addons** hat jedes Addon ein eigenes Fehler-Forum �
 | Befehl | Was er macht |
 |---|---|
 | `/gpp` | GearPilot öffnen oder schließen |
+| `/gpp tracker` | Tracker der Questroute ein- oder ausblenden |
 | `/gpp ep <Quest-ID>` | Die EP einer Quest beim Server anfragen |
 
 ## 📦 Voraussetzungen
