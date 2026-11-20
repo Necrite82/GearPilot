@@ -36,6 +36,10 @@ Our Discord **Pilot Addons** has a bug forum for every addon – no GitHub accou
 - **New Forever dungeons included:** The Drowned City, Krol'dok Stronghold, Alcaz Prison and more – refreshed every week.
 - **Dungeons to go:** your own list – prepare all quests in one go, count your runs.
 
+### Raids
+- **Every raid of WoW Forever** with its loot for you, quests and entrance.
+- **Access:** the whole Drakefire Amulet chain for Onyxia's Lair with progress, next step and "into my route".
+
 ### Map
 - **Its own map window:** quest chains numbered, all quest givers of a zone, your dungeon preparation or the whole route – with your position.
 - **Zoom, drag, click:** mouse wheel to zoom, hover for details, click for a waypoint.
@@ -126,6 +130,10 @@ Auf unserem Discord **Pilot Addons** hat jedes Addon ein eigenes Fehler-Forum �
 - **Dungeon-Details:** erwarteter Gewinn eines Laufs, alle Quests mit Reihe und EP, der Eingang und die Beute jedes Bosses – deine Upgrades hell, Wunschteile markiert.
 - **Neue Forever-Dungeons inklusive:** Versunkene Stadt, Krol'dok Stronghold, Alcaz Prison und mehr – jede Woche aktualisiert.
 - **Dungeons to go:** deine eigene Liste – alle Quests in einem Rutsch vorbereiten, Läufe zählen.
+
+### Raids
+- **Jeder Raid von WoW Forever** mit Beute für dich, Quests und Eingang.
+- **Zugang:** die ganze Reihe zum Drachenfeueramulett für Onyxias Hort mit Fortschritt, nächstem Schritt und „In meine Route“.
 
 ### Karte
 - **Eigenes Kartenfenster:** Questreihen nummeriert, alle Questgeber eines Gebiets, deine Dungeon-Vorbereitung oder die ganze Route – mit deiner Position.

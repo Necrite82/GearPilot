@@ -51,6 +51,24 @@ function GP.Catalog()
     end
     return GP.catalogList, GP.catalogByName
 end
+-- Raids in WoW Forever (Blizzard's raid overview, Oct 20, 2026: Barrow Deeps, Hyjal Summit, Onyxia's Lair). The
+-- Classic raids in the data (Molten Core, Blackwing Lair, ...) are not announced for Forever.
+-- opens: the announced opening day (provisional until it has passed); later raids get their own date here.
+GP.FOREVER_RAIDS = {
+    ["Onyxia's Lair"] = { opens = "2026-12-09" },
+    ["Barrow Deeps"] = { opens = "2026-12-09" },
+    ["Hyjal Summit"] = { opens = "2026-12-09" },
+}
+function GP.ForeverRaid(name) return name ~= nil and GP.FOREVER_RAIDS[name] ~= nil end
+-- Opening day of a confirmed raid that is not open yet ("09.12.2026"), nil when open (or unknown).
+function GP.RaidOpens(name)
+    local info = name and GP.FOREVER_RAIDS[name]
+    if not (info and info.opens) then return nil end
+    local today = date and date("%Y-%m-%d") or "0000-00-00"
+    if today >= info.opens then return nil end
+    local y, m, d = info.opens:match("(%d+)-(%d+)-(%d+)")
+    return ("%s.%s.%s"):format(d, m, y)
+end
 -- Range of your dungeons: from dungeonBelow levels below to dungeonAbove levels above your level.
 function GP.DungeonRange()
     local s = GP.settings
@@ -145,7 +163,7 @@ local function bounded(value, fallback, lower, upper)
     return math.max(lower, math.min(upper, math.floor(value)))
 end
 local chances = { [0.01] = true, [0.02] = true, [0.05] = true, [0.1] = true }
-local pages = { upgrades = true, route = true, quests = true, dungeons = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
+local pages = { upgrades = true, route = true, quests = true, dungeons = true, raids = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
 local function initialize()
     local player = GP.Player()
     local saved = type(GearPilotProSettings) == "table" and GearPilotProSettings or {}

@@ -1,0 +1,75 @@
+name: Quest vendor data (ForeverDB)
+
+# Rebuilds GearPilotPro/Data/QuestVendors.lua (every vendor of every item a quest asks for) from the ForeverDB
+# repository and proposes changes as one pull request into main (branch data/questvendors). Nothing is merged
+# automatically; an unchanged result opens no pull request.
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - tools/questvendors/**
+      - .github/workflows/questvendors.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: questvendors
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/checkout@v4
+        with:
+          repository: foreverfraddons/forever-db
+          path: forever-db
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Build and check
+        run: |
+          set -e
+          lua5.1 tools/questvendors/build.lua forever-db GearPilotPro/Data/QuestVendors.lua | tee "$RUNNER_TEMP/summary.txt"
+          luac5.1 -p GearPilotPro/Data/QuestVendors.lua
+          lua5.1 tests/run.lua
+          rm -rf forever-db
+
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          file=GearPilotPro/Data/QuestVendors.lua
+          # Only the build date changed: same data, nothing to propose.
+          if [ -z "$(git diff -U0 -- "$file" | grep '^[-+]\[')" ]; then
+            echo "Quest vendor data unchanged"; git checkout -- "$file"; exit 0
+          fi
+          python3 tools/build_release.py
+          branch="data/questvendors"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A "$file" dist
+          git commit -qm "Händlerdaten für Quest-Gegenstände"
+          git push -q --force -u origin "$branch"
+          {
+            echo "Händler für Quest-Gegenstände neu aus ForeverDB / ForeverDB_Full (GPL-3.0)."
+            echo
+            echo "- $(cat "$RUNNER_TEMP/summary.txt")"
+            echo
+            echo "Automatisch erzeugt von \`.github/workflows/questvendors.yml\`."
+          } > "$RUNNER_TEMP/body.md"
+          if gh pr view "$branch" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$branch" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head "$branch" --base main --title "Händlerdaten für Quest-Gegenstände" --body-file "$RUNNER_TEMP/body.md"
+          fi
