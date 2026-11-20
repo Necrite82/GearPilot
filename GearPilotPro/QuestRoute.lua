@@ -552,6 +552,22 @@ function QR.SetMode(mode)
 end
 
 -- A task is done when its quest moved past it.
+-- Progress of an objective from your quest log: true/false when an objective of the quest names this target,
+-- nil when the quest is not in your log or no objective matches (then reaching the place counts).
+function QR.ObjectiveState(t)
+    if not (GP.QuestInfo and onQuest(t.quest.id)) then return nil end
+    local names = {}
+    if t.item and GP.ItemData then names[#names + 1] = GP.ItemData(t.item).name end
+    if t.npc and GP.Names then names[#names + 1] = GP.Names.Get(t.npc) end
+    names[#names + 1] = t.label
+    for _, o in ipairs(GP.QuestInfo.Objectives(t.quest.id)) do
+        for _, name in ipairs(names) do
+            if type(name) == "string" and name ~= "" and o.text:find(name, 1, true) then return o.finished == true end
+        end
+    end
+    return nil
+end
+
 -- A task keeps its key when the plan is built again (new tables after every quest log update).
 function QR.TaskKey(t)
     if not t then return nil end
@@ -562,7 +578,13 @@ function QR.TaskDone(t)
     local id = t.quest.id
     if GP.Sources.QuestDone(id) then return true end
     if t.kind == "accept" then return onQuest(id) end
-    if t.kind == "objective" then return complete(id) or t.reached == true or QR.reached[QR.TaskKey(t)] == true end
+    if t.kind == "objective" then
+        if complete(id) then return true end
+        -- 1.5.1: a quest in your log tells its progress; reaching the place only counts where it does not.
+        local state = QR.ObjectiveState(t)
+        if state ~= nil then return state end
+        return t.reached == true or QR.reached[QR.TaskKey(t)] == true
+    end
     return false
 end
 
@@ -623,11 +645,25 @@ end
 -- Follow: waypoint to the next open task; moves on when a quest is accepted, completed or turned in, and when
 -- you reach an objective's place.
 local function say(text) if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffe0b050GearPilot|r " .. text) end end
-function QR.NextTask()
-    local plan = QR.Current()
+-- Open steps in order. A turn-in whose quest is in your log but not complete waits at the end: you are not
+-- sent to turn in before the objectives are done.
+function QR.Blocked(t)
+    return t.kind == "turnin" and onQuest(t.quest.id) and not complete(t.quest.id)
+end
+function QR.OpenTasks(plan)
+    local open, waiting = {}, {}
     for i, t in ipairs(plan and plan.tasks or {}) do
-        if not QR.TaskDone(t) then return t, i end
+        if not QR.TaskDone(t) then
+            local entry = { t = t, index = i }
+            if QR.Blocked(t) then waiting[#waiting + 1] = entry else open[#open + 1] = entry end
+        end
     end
+    for _, entry in ipairs(waiting) do open[#open + 1] = entry end
+    return open
+end
+function QR.NextTask()
+    local first = QR.OpenTasks(QR.Current())[1]
+    if first then return first.t, first.index end
     return nil
 end
 -- 1.4.0: the route's previous TomTom point goes when the next step starts (or the route stops); the game's own

@@ -175,10 +175,7 @@ function T.Refresh()
     if QR.following then go:SetBackdropColor(.114, .133, .165, 1) else S.Primary(go) end
     local plan = QR.Current()
     title:SetText(plan and plan.mine and L("My route") or L("Quest route"))
-    local open = {}
-    for i, t in ipairs(plan and plan.tasks or {}) do
-        if not QR.TaskDone(t) then open[#open + 1] = { t = t, index = i } end
-    end
+    local open = QR.OpenTasks(plan)
     -- Summary: zone, open quests, experience still in the route.
     local quests, xp = {}, 0
     for _, entry in ipairs(open) do

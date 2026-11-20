@@ -2202,10 +2202,9 @@ local function routeData(player)
         local flight = QR.FlightName(node)
         list[#list + 1] = { key = "route:travel", travel = true, zone = zone, flight = flight }
     end
-    for i, t in ipairs(plan.tasks) do
-        if not QR.TaskDone(t) then
-            list[#list + 1] = { key = ("route:%d:%s:%d"):format(i, t.kind, t.quest.id), task = t, index = i }
-        end
+    for _, entry in ipairs(QR.OpenTasks(plan)) do
+        local i, t = entry.index, entry.t
+        list[#list + 1] = { key = ("route:%d:%s:%d"):format(i, t.kind, t.quest.id), task = t, index = i }
     end
     -- Summary: zone, quests, experience and how far it gets you.
     local parts = {}
