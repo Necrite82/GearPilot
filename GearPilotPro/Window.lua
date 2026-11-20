@@ -420,8 +420,8 @@ segmentPill({ "bags" }, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", 
 -- 1.5.0: the route page has views: the route, choosing quests for your own route, your quest log, remembered
 -- and skipped quests.
 local function routeView() return GP.settings.views.route or "route" end
-segmentPill({ "route" }, "View", 96, { { "route", "Route" }, { "pick", "Choose quests" }, { "log", "Quest log" },
-    { "later", "Remembered" }, { "skipped", "Skipped" } }, "views.route", "route")
+segmentPill({ "route" }, "View", 96, { { "route", "Route" }, { "pick", "Choose quests" }, { "class", "Class quests" },
+    { "log", "Quest log" }, { "later", "Remembered" }, { "skipped", "Skipped" } }, "views.route", "route")
 local routeMode = segmentPill({ "route" }, "Route from", 110, { { "auto", "Automatic" }, { "mine", "My quests" } }, "routeMode", "auto")
 routeMode.when = function() local v = routeView(); return v == "route" or v == "pick" end
 local routeFocus = segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
@@ -516,6 +516,28 @@ for i, group in ipairs(slotGroups) do
     b:SetPoint("TOPLEFT", U.slotMenu, "TOPLEFT", 8, -6 - (i - 1) * 26)
     b.key = group[1]
     U.slotItems[i] = b
+end
+
+-- 1.7.0: class quests of your class or, to look at, of another class.
+local classPill = pill({ "route" }, "Class")
+classPill.when = function() return (GP.settings.views.route or "route") == "class" end
+U.classButton = S.Button(classPill, 150, 24, "", function() U.classMenu:SetShown(not U.classMenu:IsShown()) end)
+U.classButton:SetPoint("TOPLEFT", classPill, "TOPLEFT", classPill.captionWidth, -3)
+classPill:SetWidth(classPill.captionWidth + 154)
+U.classMenu = S.Surface(frame, "raised")
+U.classMenu:SetFrameStrata("DIALOG")
+U.classMenu:SetPoint("TOPLEFT", U.classButton, "BOTTOMLEFT", 0, -4)
+U.classMenu:SetSize(166, 12 + (#GP.ClassQuests.classes + 1) * 26)
+U.classMenu:Hide()
+for i, entry in ipairs({ { nil }, unpack(GP.ClassQuests.classes) }) do
+    local class = entry[1]
+    local b = S.Button(U.classMenu, 150, 24, class and GP.ClassQuests.ClassName(class) or L("Your class"), function()
+        GP.settings.classView = class
+        GP.selected["routeclassquest"] = nil
+        U.classMenu:Hide()
+        GP.Render()
+    end)
+    b:SetPoint("TOPLEFT", U.classMenu, "TOPLEFT", 8, -6 - (i - 1) * 26)
 end
 
 local function barRows(page)
@@ -987,7 +1009,9 @@ local function chainSteps(chain, targetID)
             f.sub:SetWidth(width - 160)
             f.title:SetText(("%d. %s"):format(i, st.title))
             local grey = not finished and P.IsGrey(st.level, playerLevel)
-            local c = st.id == targetID and C.gold or finished and { .62, .78, .66 } or grey and { .62, .62, .62 }
+            -- 1.7.0: steps you cannot take yet (level) are greyed out with their level.
+            local tooLow = not finished and not st.active and type(st.minLevel) == "number" and st.minLevel > playerLevel
+            local c = st.id == targetID and C.gold or finished and { .62, .78, .66 } or (grey or tooLow) and { .62, .62, .62 }
                 or (isNext or st.active) and C.text or C.muted
             f.title:SetTextColor(c[1], c[2], c[3])
             local value = GP.QuestXP.Get(st.id, st.level)
@@ -999,6 +1023,7 @@ local function chainSteps(chain, targetID)
             elseif st.active then badge, bc = L("in quest log"), C.gold
             elseif isNext then badge, bc = L("next"), C.gold end
             if grey then badge = (badge ~= "" and (badge .. " · ") or "") .. L("grey") end
+            if tooLow then badge = (badge ~= "" and (badge .. " · ") or "") .. (L("from level %d"):format(st.minLevel)) end
             if st.id == targetID and not st.done then badge = (badge ~= "" and (badge .. " · ") or "") .. L("reward") end
             f.badge:SetText(badge)
             f.badge:SetTextColor(bc[1], bc[2], bc[3])
@@ -1622,6 +1647,21 @@ local function showDungeon(dungeon, profile, equipped)
     if opens then
         detailLine("GameFontHighlightSmall", (L("Opens %s (provisional date). You can do the access quests already."):format(opens)), C.gold)
     end
+    -- 1.7.0: your class quests that play in this dungeon (the Sunken Temple ones, say).
+    for _, chain in ipairs(d and GP.ClassQuests.ForDungeon(d.name) or {}) do
+        local steps, cdone, nextStep = GP.ClassQuests.Status(chain)
+        if cdone < #steps then
+            section(L("Class quest") .. ": " .. GP.QuestInfo.Title(chain.id, chain.title) .. "  |cff9dabb8"
+                .. (L("%d of %d done"):format(cdone, #steps)) .. "|r")
+            if nextStep then
+                sourceLine2(nextStep.active and "questactive" or "quest", nextStep.title,
+                    (nextStep.giver or "?") .. (nextStep.zone and (", " .. nextStep.zone) or "")
+                    .. ((type(nextStep.minLevel) == "number" and nextStep.minLevel > player.level) and (" · " .. (L("from level %d"):format(nextStep.minLevel))) or ""),
+                    L("Waypoint"), function() GP.Route.ToGiver(nextStep.id) end,
+                    function() GP.Map.Chain(chain.id) end, nil, nextStep.id, nextStep.title)
+            end
+        end
+    end
     -- 1.6.1: access quests (Drakefire Amulet, dungeon keys): the chain with its status and the next step.
     local access = d and GP.Access.For(d.name) or {}
     for _, a in ipairs(access) do
@@ -1900,6 +1940,37 @@ local function showSkipped(data)
     questObjectives(data.id)
     actions({ L("Back into the route"), function() GP.QuestRoute.Skip(data.id, false) end, 180 },
         { L("Waypoint"), function() GP.Route.ToGiver(data.id) end, 110 })
+end
+
+local function showClassChain(data)
+    local chain = data.chain
+    local steps, done, nextStep = GP.ClassQuests.Status(chain)
+    local title = questHead(chain.id, chain.title, (L("from level %d"):format(chain.minLevel))
+        .. (chain.dungeon and (" · " .. chain.dungeon) or ""))
+    local open = {}
+    for _, st in ipairs(steps) do if not st.done and not st.skipped then open[#open + 1] = { id = st.id, level = st.level } end end
+    local xp = GP.QuestXP.Sum(open)
+    local width = (U.detail:GetWidth() or 300) - 24
+    S.Metrics(U.detail, {
+        { label = L("Steps"), value = ("%d/%d"):format(done, #steps), color = C.text, emphasis = true },
+        { label = L("Experience"), value = xp > 0 and GP.QuestXP.Text(xp) or "-", color = C.gold },
+        { label = L("Quest level"), value = tostring(chain.level or "?"), color = C.text },
+    }, 12, detailY, width)
+    detailY = detailY + 60
+    if not data.own then
+        detailLine("GameFontDisableSmall", L("Class quests of another class: to look at."), C.muted)
+    elseif nextStep and type(nextStep.minLevel) == "number" and nextStep.minLevel > GP.Player().level then
+        detailLine("GameFontHighlightSmall", (L("Next step from level %d."):format(nextStep.minLevel)), C.muted)
+    end
+    if done < #steps then
+        local buttons = {}
+        if nextStep then buttons[#buttons + 1] = { L("Next step"), function() GP.Route.ToGiver(nextStep.id) end, 110 } end
+        buttons[#buttons + 1] = { L("Whole chain"), function() GP.Route.ToChain(chain.id) end, 110 }
+        if data.own then buttons[#buttons + 1] = { L("Into my route"), function() GP.ClassQuests.ToMyRoute(chain) end, 130 } end
+        buttons[#buttons + 1] = { L("Map"), function() GP.Map.Chain(chain.id) end, 80 }
+        tools(buttons)
+    end
+    chainSteps(steps, chain.id)
 end
 
 local function showClutter(data, total)
@@ -2242,6 +2313,17 @@ local function routeViewData(view)
         local count, max = #GP.QuestLog.Quests(), GP.QuestLog.Max()
         GP.routeSummary = (L("%d quests to choose from"):format(#list)) .. "  ·  " .. (L("quest log %d/%d"):format(count, max))
         return list, false, {}, "routepick"
+    elseif view == "class" then
+        local player = GP.Player()
+        local class = GP.settings.classView or player.class
+        U.classButton:SetText(class == player.class and (L("Your class") .. " (" .. GP.ClassQuests.ClassName(class) .. ")")
+            or GP.ClassQuests.ClassName(class))
+        for _, chain in ipairs(GP.ClassQuests.Chains(class)) do
+            list[#list + 1] = { key = "class:" .. chain.id, chain = chain, own = class == player.class }
+        end
+        GP.routeSummary = (L("%d class quest chains"):format(#list)) .. "  ·  " .. GP.ClassQuests.ClassName(class)
+            .. (class ~= player.class and ("  ·  " .. L("to look at")) or "")
+        return list, false, {}, "classquest"
     elseif view == "log" then
         for _, entry in ipairs(GP.QuestLog.Ranked()) do list[#list + 1] = { key = "log:" .. entry.id, entry = entry } end
         local count, max = #GP.QuestLog.Quests(), GP.QuestLog.Max()
@@ -2711,6 +2793,23 @@ function fillRow(r, kind, data, width, list)
             r.value:SetText((t.kind == "turnin" and t.quest.xp > 0) and GP.QuestXP.Text(t.quest.xp) or "")
             color(r.value, C.gold)
         end
+    elseif kind == "classquest" then
+        local chain = data.chain
+        local steps, done = GP.ClassQuests.Status(chain)
+        local level = GP.Player().level
+        local early = chain.minLevel > level
+        GP.QuestInfo.Set(r.quest, chain.id, chain.title)
+        r.icon:SetTexture(done >= #steps and "Interface\\RaidFrame\\ReadyCheck-Ready" or "Interface\\GossipFrame\\AvailableQuestIcon")
+        r.icon:SetDesaturated(early)
+        r.icon:SetAlpha(early and .5 or 1)
+        r.name:SetText(GP.QuestInfo.Title(chain.id, chain.title))
+        color(r.name, early and C.muted or C.text)
+        local parts = { (L("from level %d"):format(chain.minLevel)) }
+        if #steps > 1 then parts[#parts + 1] = (L("%d steps"):format(#steps)) end
+        if chain.dungeon then parts[#parts + 1] = chain.dungeon end
+        r.sub:SetText(table.concat(parts, " · "))
+        r.value:SetText(done >= #steps and L("done") or ("%d/%d"):format(done, #steps))
+        color(r.value, done >= #steps and C.green or early and C.muted or C.gold)
     elseif kind == "routepick" or kind == "questlog" or kind == "questlater" or kind == "routeskip" then
         local id, title, level
         if kind == "routepick" then id, title, level = data.q.id, data.q.title, data.q.level
@@ -2766,6 +2865,8 @@ end
 
 function GP.Render()
     if not frame:IsShown() or not GP.settings then return end
+    -- Profile or settings may have changed: tooltip lines are worked out again.
+    if GP.TooltipChanged then GP.TooltipChanged() end
     local s = GP.settings
     local page = s.page
     local player = GP.Player()
@@ -2887,6 +2988,8 @@ function GP.Render()
         showClutter(found, list.total)
     elseif kind == "route" then
         showRouteTask(found, profile, equipped)
+    elseif kind == "classquest" then
+        showClassChain(found)
     elseif kind == "routepick" then
         showPick(found)
     elseif kind == "questlog" then

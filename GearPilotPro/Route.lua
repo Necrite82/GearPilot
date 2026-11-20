@@ -24,7 +24,7 @@ function Route.Step(questID)
     local uiMap, x, y = S.MapPoint(spot)
     return {
         id = questID, title = S.QuestTitle(questID, quest and quest[1] or ("#" .. questID)),
-        level = quest and quest[2], giver = S.GiverName(db, ref), spot = spot, uiMap = uiMap, x = x, y = y,
+        level = quest and quest[2], minLevel = quest and quest[3], giver = S.GiverName(db, ref), spot = spot, uiMap = uiMap, x = x, y = y,
         zone = S.MapName(uiMap), done = S.QuestDone(questID), active = onQuest(questID),
     }
 end

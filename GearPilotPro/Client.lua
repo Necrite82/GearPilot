@@ -24,13 +24,24 @@ local function itemData(ref)
 end
 GP.ItemData = itemData
 
+-- 1.6.3: your gear is read once and kept until it changes (every tooltip, page and route plan asked again).
+local gearCache
 function GP.ReadGear()
-    local equipment = {}
+    if gearCache then return gearCache end
+    local equipment, loading = {}, false
     for _, slot in ipairs(P.slots) do
         local link = GetInventoryItemLink("player", slot[1])
-        if link then equipment[slot[1]] = itemData(link) end
+        if link then
+            equipment[slot[1]] = itemData(link)
+            loading = loading or equipment[slot[1]].loading or false
+        end
     end
+    if not loading then gearCache = equipment end
     return equipment
+end
+function GP.GearChanged()
+    gearCache = nil
+    if GP.TooltipChanged then GP.TooltipChanged() end
 end
 
 function GP.Player()
@@ -134,6 +145,8 @@ function GP.ReadCandidates(source, low, high, options)
         return entries, loading, "ready"
     end
     local dungeonQuests = GP.settings.dungeonQuests
+    -- The catalog once, not per row (1.6.3: was asked thousands of times per page).
+    local byName = source == "Dungeons" and select(2, GP.Catalog()) or nil
     for _, row in ipairs(rows) do
         local isDungeonQuest = row.dungeonQuest ~= nil
         local wanted = row.source ~= "Quests" or dungeonQuests == "show"
@@ -143,7 +156,6 @@ function GP.ReadCandidates(source, low, high, options)
         if wanted and row.exclusive and GP.Sources.Excluded(row) then wanted = false end
         local inWindow = row.level >= low and row.level <= high
         if source == "Dungeons" and row.source == source then
-            local _, byName = GP.Catalog()
             inWindow = (options and options.all) or GP.DungeonInRange(byName[row.name], low, high)
         end
         if wanted and row.source == source and inWindow and required <= high
@@ -360,6 +372,10 @@ for _, event in ipairs({
     events:RegisterEvent(event)
 end
 events:SetScript("OnEvent", function(_, event, arg, success)
+    if event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_LEVEL_UP" or event == "PLAYER_TALENT_UPDATE"
+        or event == "SKILL_LINES_CHANGED" or event == "PLAYER_ENTERING_WORLD" then
+        GP.GearChanged()
+    end
     if event == "ADDON_LOADED" then
         if arg ~= addonName then return end
         initialize()
@@ -378,6 +394,10 @@ SlashCmdList.GEARPILOTPRO = function(text)
     command = (command or ""):lower()
     if (command == "ep" or command == "xp") and tonumber(rest) then
         GP.QuestXP.Test(tonumber(rest))
+        return
+    end
+    if command == "speicher" or command == "memory" or command == "mem" then
+        GP.Diagnostics.StartMemoryWatch(tonumber(rest) or 60)
         return
     end
     if command == "tracker" or command == "route" then
