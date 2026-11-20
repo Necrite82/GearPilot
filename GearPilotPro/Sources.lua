@@ -164,6 +164,12 @@ local function dungeonOf(db, npcID, att)
     return nil
 end
 
+-- Dungeon (name) of a creature, for class quests that play in a dungeon.
+function Sources.NpcDungeon(db, npcID)
+    local _, name = dungeonOf(db, npcID, attIndex(GP.DungeonData))
+    return name
+end
+
 -- ForeverDB lists some bosses also as vendors of their own loot. A "vendor" inside a dungeon that drops the
 -- item is that boss, not a vendor (real dungeon vendors such as Lokhtos do not drop what they sell).
 local function bossAsVendor(db, itemID, npcID, att)

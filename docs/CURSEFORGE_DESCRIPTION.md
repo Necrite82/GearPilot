@@ -21,6 +21,7 @@ Our Discord **Pilot Addons** has a bug forum for every addon – no GitHub accou
 - **Grows with you:** new quests come in after every level, grey ones go, and when a zone runs dry the next one comes.
 - **Your way:** skip quests, move them earlier or later, hide escort quests – or build **your own route** from the quests you pick.
 - **Quest log full?** GearPilot says which quests are best to abandon; dungeon quests can be remembered and taken again later with a waypoint.
+- **Class quests:** every class quest chain from start to end, greyed out until your level – your class or any other to look at; dungeon class quests (Sunken Temple, say) also in the dungeon details.
 - **Tracker:** a small window to leave open – current step with your progress, the next steps with distance and experience.
 - **Quest info on hover:** objectives, quest text and experience; Shift-click links a quest in chat, right-click shares it.
 
@@ -117,6 +118,7 @@ Auf unserem Discord **Pilot Addons** hat jedes Addon ein eigenes Fehler-Forum �
 - **Wächst mit:** nach jeder Stufe kommen neue Quests dazu, graue fallen weg, und ist ein Gebiet ausgeschöpft, kommt das nächste.
 - **Dein Weg:** Quests überspringen, früher oder später legen, Begleitquests ausblenden – oder **deine eigene Route** aus selbst gewählten Quests bauen.
 - **Questlog voll?** GearPilot sagt, welche Quests am ehesten weg können; Dungeonquests lassen sich merken und später per Wegpunkt wieder annehmen.
+- **Klassenquests:** jede Klassenquest-Reihe vom Start bis zum Ende, ausgegraut bis zur nötigen Stufe – deine Klasse oder jede andere zum Ansehen; Dungeon-Klassenquests (z. B. Versunkener Tempel) auch in den Dungeon-Details.
 - **Tracker:** ein kleines Fenster zum Offenlassen – aktueller Schritt mit Fortschritt, die nächsten Schritte mit Entfernung und EP.
 - **Questinfo beim Überfahren:** Ziele, Questtext und EP; Shift-Klick verlinkt eine Quest im Chat, Rechtsklick teilt sie.
 

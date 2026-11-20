@@ -399,6 +399,12 @@ local de = {
     ["Only quests in your quest log can be shared."] = "Teilen geht nur mit Quests in deinem Questlog.",
     ["You are not in a group."] = "Du bist in keiner Gruppe.", ["This quest cannot be shared."] = "Diese Quest kann nicht geteilt werden.",
     ["Shared: %s"] = "Geteilt: %s",
+    -- 1.7.0 class quests
+    ["Class quests"] = "Klassenquests", ["Class"] = "Klasse", ["Your class"] = "Deine Klasse",
+    ["%d class quest chains"] = "%d Klassenquest-Reihen", ["to look at"] = "zum Ansehen", ["%d steps"] = "%d Schritte",
+    ["Steps"] = "Schritte", ["Class quests of another class: to look at."] = "Klassenquests einer anderen Klasse: zum Ansehen.",
+    ["Next step from level %d."] = "Nächster Schritt ab Stufe %d.", ["Class quest"] = "Klassenquest",
+    ["%d quests of this chain are in your own route."] = "%d Quests dieser Reihe sind in deiner eigenen Route.",
     -- 1.6.3 memory check
     ["Memory check is already running."] = "Speichermessung läuft bereits.",
     ["Memory check runs for %d seconds – just keep playing."] = "Speichermessung läuft %d Sekunden – spiel ganz normal weiter.",
