@@ -145,16 +145,27 @@ local function pin(i)
     p:SetScript("OnEnter", function(self)
         local point = self.point
         if not point then return end
+        local quest = point.questID or point.infoQuest
+        if quest and GP.QuestInfo then
+            -- 1.3.6: quest pins show the quest text and can be linked and shared.
+            GP.QuestInfo.Show(self, quest, point.title, { prefix = point.label and (point.label .. ". ") or nil,
+                lines = point.sub and { point.sub } or nil, hint = L("Click: waypoint") })
+            return
+        end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText((point.label and (point.label .. ". ") or "") .. (point.title or ""))
         if point.sub then GameTooltip:AddLine(point.sub, .8, .8, .8, true) end
         GameTooltip:AddLine(L("Click: waypoint"), .88, .69, .31)
         GameTooltip:Show()
     end)
-    p:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    p:SetScript("OnClick", function(self)
+    p:SetScript("OnLeave", function(self) if GP.QuestInfo then GP.QuestInfo.Hide(self) else GameTooltip:Hide() end end)
+    p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    p:SetScript("OnClick", function(self, button)
         local point = self.point
         if not point then return end
+        local quest = point.questID or point.infoQuest
+        if quest and GP.QuestInfo and GP.QuestInfo.Click(quest, point.title, button) then return end
+        if button == "RightButton" then return end
         if point.questID then GP.Route.ToGiver(point.questID)
         else GP.Route.ToSpot({ world = false, map = point.uiMap, x = point.x, y = point.y }, point.title, point.sub) end
     end)

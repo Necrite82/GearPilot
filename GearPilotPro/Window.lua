@@ -276,10 +276,15 @@ U.detailScroll:SetScrollChild(U.detail)
 U.detailIcon = U.detail:CreateTexture(nil, "ARTWORK")
 U.detailIcon:SetSize(40, 40)
 U.detailIcon:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 10, -10)
-U.detailIconHover = CreateFrame("Frame", nil, U.detail)
+U.detailIconHover = CreateFrame("Button", nil, U.detail)
 U.detailIconHover:SetAllPoints(U.detailIcon)
 U.detailIconHover:EnableMouse(true)
+U.detailIconHover:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+U.detailIconHover:SetScript("OnClick", function(_, button)
+    if U.detailQuest then GP.QuestInfo.Click(U.detailQuest, U.detailQuestTitle, button) end
+end)
 U.detailIconHover:SetScript("OnEnter", function(self)
+    if U.detailQuest then GP.QuestInfo.Show(self, U.detailQuest, U.detailQuestTitle); return end
     if not U.detailLink then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetHyperlink(U.detailLink)
@@ -423,6 +428,7 @@ actionPill({ "route" }, "Route", 90, {
                 local uiMap, x, y = GP.QuestRoute.MapPoint(t)
                 if uiMap and x then
                     points[#points + 1] = { uiMap = uiMap, x = x, y = y, label = tostring(i), questID = t.kind == "accept" and t.quest.id or nil,
+                        infoQuest = t.quest.id,
                         kind = t.kind == "accept" and "quest" or t.kind == "turnin" and "active" or "done",
                         title = GP.QuestRoute.Title(t.quest), sub = GP.QuestRoute.TaskText(t) }
                 end
@@ -578,6 +584,9 @@ local function row(i)
         GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- 1.3.6: the quest icon shows the quest text, Shift-click links it, right-click shares it.
+    r.quest = GP.QuestInfo.Hotspot(r, r.icon)
+    r.quest.fallthrough = function() r:Click() end
     U.rows[i] = r
     return r
 end
@@ -664,7 +673,7 @@ local SOURCE_ICONS = {
     auction = "Interface\\Icons\\INV_Misc_Coin_04", questdone = "Interface\\RaidFrame\\ReadyCheck-Ready",
     questactive = "Interface\\GossipFrame\\ActiveQuestIcon",
 }
-local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, indent)
+local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, indent, questID, questTitle)
     U.sourceLines.used = (U.sourceLines.used or 0) + 1
     local i = U.sourceLines.used
     local f = U.sourceLines[i]
@@ -682,6 +691,7 @@ local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, 
         f.button:SetPoint("RIGHT", f, "RIGHT", -6, 0)
         f.map = S.Button(f, 60, 22, L("Map"), nil)
         f.map:SetPoint("RIGHT", f.button, "LEFT", -6, 0)
+        f.quest = GP.QuestInfo.Hotspot(f, f.icon)
         U.sourceLines[i] = f
     end
     indent = indent or 0
@@ -691,6 +701,7 @@ local function sourceLine2(kind, title, sub, buttonText, callback, mapCallback, 
     f:SetSize(width, 38)
     f:SetBackdropColor(.122, .141, .172, 1)
     f.icon:SetTexture(SOURCE_ICONS[kind] or SOURCE_ICONS.world)
+    GP.QuestInfo.Set(f.quest, questID, questTitle)
     local reserved = 160 + (mapCallback and 66 or 0)
     f.title:SetWidth(width - reserved)
     f.sub:SetWidth(width - reserved)
@@ -838,6 +849,7 @@ local function step(i)
     f.badge = S.Text(f, "GameFontHighlightSmall", 0, 13, 100, "", "RIGHT")
     f.badge:ClearAllPoints()
     f.badge:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -13)
+    f.quest = GP.QuestInfo.Hotspot(f, f.icon)
     U.steps[i] = f
     return f
 end
@@ -895,6 +907,7 @@ local function chainSteps(chain, targetID)
             f.stripe:SetShown(isNext)
             local finished = st.done or st.skipped
             f.icon:SetTexture(finished and ICON_DONE or st.active and ICON_ACTIVE or ICON_OPEN)
+            GP.QuestInfo.Set(f.quest, st.id, st.title)
             f.icon:SetDesaturated(st.skipped or (not st.done and not st.active and not isNext))
             f.icon:SetAlpha((st.done or st.active or isNext) and 1 or .55)
             f.line:ClearAllPoints()
@@ -1064,6 +1077,7 @@ local function showHead(icon, name, sub, link)
     U.detailName:SetText(name or "")
     U.detailSub:SetText(sub or "")
     U.detailLink = link
+    U.detailQuest, U.detailQuestTitle = nil, nil
     local onList = link and GP.Wish and GP.Wish.Has(link)
     U.wishButton:SetShown(link ~= nil)
     U.wishButton:SetText(onList and L("On wishlist") or L("+ Wishlist"))
@@ -1305,7 +1319,8 @@ local function showSources(id, item)
                 .. (src.giver and (" · " .. src.giver) or "") .. (src.zone and (", " .. src.zone) or ""),
                 #chain > 1 and (L("Chain (%d)")):format(#chain) or L("Waypoint"),
                 function() if #chain > 1 then GP.Route.ToChain(src.questID) else GP.Route.ToGiver(src.questID) end end,
-                function() if #chain > 1 then GP.Map.Chain(src.questID) else GP.Map.Quests(title, { src.questID }) end end)
+                function() if #chain > 1 then GP.Map.Chain(src.questID) else GP.Map.Quests(title, { src.questID }) end end,
+                nil, src.questID, src.name)
         elseif src.kind == "dungeon" then
             local entrance = db and GP.Sources.Entrance(db, src.name)
             local dungeonName = GP.Sources.DungeonName(src)
@@ -1579,7 +1594,7 @@ local function showDungeon(dungeon, profile, equipped)
             local mapCallback = not info.done and function()
                 if #chain > 1 then GP.Map.Chain(info.id) else GP.Map.Quests(title, { info.id }) end
             end or nil
-            sourceLine2(kind, title, table.concat(parts, " · "), button, callback, mapCallback)
+            sourceLine2(kind, title, table.concat(parts, " · "), button, callback, mapCallback, nil, info.id, info.title)
             if expanded then
                 local _, nextIndex = P.ChainStatus(chain)
                 for i, st in ipairs(chain) do
@@ -1597,7 +1612,7 @@ local function showDungeon(dungeon, profile, equipped)
                     if not finished then
                         stepButton, stepCallback = L("Waypoint"), function() GP.Route.ToGiver(st.id) end
                     end
-                    sourceLine2(stepKind, stepTitle, table.concat(stepParts, " · "), stepButton, stepCallback, nil, 24)
+                    sourceLine2(stepKind, stepTitle, table.concat(stepParts, " · "), stepButton, stepCallback, nil, 24, st.id, st.title)
                 end
                 sourceLine2("quest", L("All open steps"), L("Waypoints to every open step of this chain, in order."),
                     L("Waypoints"), function() GP.Route.ToChain(info.id) end, nil, 24)
@@ -1666,6 +1681,7 @@ local function showRouteTask(data, profile, equipped)
     local title = QR.Title(q)
     showHead(t.kind == "accept" and "Interface\\GossipFrame\\AvailableQuestIcon" or "Interface\\GossipFrame\\ActiveQuestIcon",
         title, QR.TaskText(t) .. (q.zoneName and (" · " .. q.zoneName) or ""))
+    U.detailQuest, U.detailQuestTitle = q.id, q.title
     local width = (U.detail:GetWidth() or 300) - 24
     S.Metrics(U.detail, {
         { label = L("Experience"), value = q.xp > 0 and GP.QuestXP.Text(q.xp) or "-", color = C.gold, emphasis = true },
@@ -1686,7 +1702,7 @@ local function showRouteTask(data, profile, equipped)
         if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, title, QR.TaskText(t)) end
     end, 140 }, { L("Map"), function()
         if uiMap and x then GP.Map.Show(title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
-            title = title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil } }) end
+            title = title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil, infoQuest = q.id } }) end
     end, 90 })
     -- The gear on the way: this quest's reward or the one at the end of its chain.
     if q.reward and (q.gain or 0) > 0 then
@@ -2315,6 +2331,7 @@ end
 local function fillRow(r, kind, data, width, list)
     local item = data.item
     r.link = item and item.link
+    GP.QuestInfo.Set(r.quest, nil)
     r.icon:SetDesaturated(false)
     r.icon:SetAlpha(1)
     color(r.name, C.text)
@@ -2405,6 +2422,7 @@ local function fillRow(r, kind, data, width, list)
                 turnin = "Interface\\GossipFrame\\ActiveQuestIcon" }
             r.icon:SetTexture(icons[t.kind])
             r.name:SetText(("%d. %s"):format(data.index, GP.QuestRoute.Title(t.quest)))
+            GP.QuestInfo.Set(r.quest, t.quest.id, t.quest.title)
             local sub = { GP.QuestRoute.TaskText(t) }
             local here = GP.QuestRoute.Position()
             if t.p and here then
