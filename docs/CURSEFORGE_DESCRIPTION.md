@@ -16,7 +16,8 @@ Our Discord **Pilot Addons** has a bug forum for every addon – no GitHub accou
 - **Worth most at your level:** experience plus the upgrade value of the rewards for your gear – a reward at the end of a chain already counts for its first quest.
 - **Your focus:** experience, gear or balanced.
 - **The right zone:** the one that pays most for the way there, with the nearest flight point of your faction and the zone after it.
-- **Step by step:** accept, objectives, turn in – nearest first. "Go" sets the waypoint and moves on by itself.
+- **Step by step:** accept, objectives, turn in – nearest first, and what lies on the way in passing. "Go" sets the waypoint and moves on by itself.
+- **Buy what the quest wants:** spices, drinks or thread a vendor sells become a step "Buy 1/3 · vendor" with a waypoint to the nearest vendor.
 - **Grows with you:** new quests come in after every level, grey ones go, and when a zone runs dry the next one comes.
 - **Your way:** skip quests, move them earlier or later, hide escort quests – or build **your own route** from the quests you pick.
 - **Quest log full?** GearPilot says which quests are best to abandon; dungeon quests can be remembered and taken again later with a waypoint.
@@ -106,7 +107,8 @@ Auf unserem Discord **Pilot Addons** hat jedes Addon ein eigenes Fehler-Forum �
 - **Was sich lohnt:** Erfahrung plus Upgrade-Wert der Belohnungen für deine Ausrüstung – eine Belohnung am Ende einer Reihe zählt schon für deren erste Quest.
 - **Dein Fokus:** Erfahrung, Ausrüstung oder ausgewogen.
 - **Das richtige Gebiet:** das, das sich mit dem Weg dorthin am meisten lohnt, mit nächstem Flugpunkt deiner Fraktion und dem Gebiet danach.
-- **Schritt für Schritt:** annehmen, Ziele, abgeben – das Nächste zuerst. „Los“ setzt den Wegpunkt und rückt von selbst weiter.
+- **Schritt für Schritt:** annehmen, Ziele, abgeben – das Nächste zuerst, und was auf dem Weg liegt gleich mit. „Los“ setzt den Wegpunkt und rückt von selbst weiter.
+- **Kaufen, was die Quest will:** Gewürze, Getränke oder Garn vom Händler werden ein Schritt „Kaufen 1/3 · Händler“ mit Wegpunkt zum nächsten Händler.
 - **Wächst mit:** nach jeder Stufe kommen neue Quests dazu, graue fallen weg, und ist ein Gebiet ausgeschöpft, kommt das nächste.
 - **Dein Weg:** Quests überspringen, früher oder später legen, Begleitquests ausblenden – oder **deine eigene Route** aus selbst gewählten Quests bauen.
 - **Questlog voll?** GearPilot sagt, welche Quests am ehesten weg können; Dungeonquests lassen sich merken und später per Wegpunkt wieder annehmen.
