@@ -419,7 +419,11 @@ segmentPill({ "bags" }, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", 
 segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
 segmentPill({ "route" }, "Dungeon quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeDungeon", false)
 actionPill({ "route" }, "Route", 90, {
-    { "Go", function() GP.QuestRoute.Follow(true) end },
+    { "Go", function()
+        GP.QuestRoute.Follow(true, true)
+        if GP.Tracker then GP.Tracker.Show() end
+    end },
+    { "Tracker", function() GP.Tracker.Toggle() end },
     { "Map", function()
         local plan = GP.QuestRoute.Current()
         local points = {}

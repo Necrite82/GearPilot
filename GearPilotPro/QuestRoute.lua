@@ -387,11 +387,17 @@ end
 function QR.Invalidate() QR.plan = nil end
 
 -- A task is done when its quest moved past it.
+-- A task keeps its key when the plan is built again (new tables after every quest log update).
+function QR.TaskKey(t)
+    if not t then return nil end
+    return t.kind .. ":" .. t.quest.id .. ":" .. tostring(t.item or t.npc or t.label or "")
+end
+QR.reached = {}
 function QR.TaskDone(t)
     local id = t.quest.id
     if GP.Sources.QuestDone(id) then return true end
     if t.kind == "accept" then return onQuest(id) end
-    if t.kind == "objective" then return complete(id) or t.reached == true end
+    if t.kind == "objective" then return complete(id) or t.reached == true or QR.reached[QR.TaskKey(t)] == true end
     return false
 end
 
@@ -459,8 +465,10 @@ function QR.NextTask()
     end
     return nil
 end
-function QR.Follow(on)
+function QR.Follow(on, force)
     QR.following = on
+    if not on or force then QR.currentKey = nil end
+    if GP.Tracker and GP.Tracker.Refresh then GP.Tracker.Refresh() end
     if not on then return end
     local t, i = QR.NextTask()
     if not t then
@@ -468,8 +476,13 @@ function QR.Follow(on)
         QR.following = false
         return
     end
+    -- 1.4.0: only a new step sets the waypoint and writes to the chat (the plan is rebuilt on every quest log
+    -- update, which used to repeat the same line again and again).
+    local key = QR.TaskKey(t)
+    local changed = key ~= QR.currentKey
+    QR.current, QR.currentKey = t, key
+    if not changed then return end
     local uiMap, x, y = QR.MapPoint(t)
-    QR.current = t
     if uiMap and x and C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
         C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(uiMap, x, y))
         if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
@@ -477,7 +490,10 @@ function QR.Follow(on)
     if type(TomTom) == "table" and TomTom.AddWaypoint and uiMap and x then
         pcall(TomTom.AddWaypoint, TomTom, uiMap, x, y, { title = QR.Title(t.quest) .. " · " .. QR.TaskText(t), from = "GearPilot", persistent = false })
     end
-    say((L("Quest route %d of %d: "):format(i, #QR.Current().tasks)) .. QR.Title(t.quest) .. " · " .. QR.TaskText(t))
+    -- With the tracker open the step is there already; the chat line is only for players without it.
+    if not (GP.Tracker and GP.Tracker.IsShown()) then
+        say((L("Quest route %d of %d: "):format(i, #QR.Current().tasks)) .. QR.Title(t.quest) .. " · " .. QR.TaskText(t))
+    end
 end
 
 local events = CreateFrame("Frame")
@@ -496,7 +512,7 @@ events:SetScript("OnEvent", function(_, event)
         pendingUpdate = false
         if QR.following then
             local t = QR.NextTask()
-            if t ~= QR.current then QR.Follow(true) end
+            if QR.TaskKey(t) ~= QR.currentKey then QR.Follow(true) end
         end
         if GP.ScheduleRefresh then GP.ScheduleRefresh() end
     end)
@@ -512,6 +528,7 @@ events:SetScript("OnUpdate", function(_, delta)
         local here = QR.Position()
         if here and distance(here, t.p) < 40 then
             t.reached = true
+            QR.reached[QR.TaskKey(t)] = true
             QR.Follow(true)
         end
     end

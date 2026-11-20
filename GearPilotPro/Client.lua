@@ -361,5 +361,9 @@ SlashCmdList.GEARPILOTPRO = function(text)
         GP.QuestXP.Test(tonumber(rest))
         return
     end
+    if command == "tracker" or command == "route" then
+        GP.Tracker.Toggle()
+        return
+    end
     if GP.Toggle then GP.Toggle() end
 end
