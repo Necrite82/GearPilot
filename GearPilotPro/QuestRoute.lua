@@ -65,9 +65,21 @@ QR.NearbySpawns, QR.SpotVia = nearbySpawns, spotVia
 -- Places of every vendor of your faction that sells an item: { continent, y, x, vendorID }.
 function QR.VendorSpots(db, itemID)
     local out = {}
+    local faction = GP.Player and GP.Player().faction
+    local function friendly(side)
+        return not side or side == "" or not faction or side == "AH"
+            or (faction == "Alliance" and side == "A") or (faction == "Horde" and side == "H")
+    end
+    -- 1.6.1: the full vendor lists (ForeverDB keeps at most 30 vendors per item, the nearest can be missing).
+    local full = GP.QuestVendors and GP.QuestVendors[itemID]
+    if type(full) == "table" then
+        for _, v in ipairs(full) do
+            if friendly(v[5]) then out[#out + 1] = { v[2], v[3], v[4], v[1] } end
+        end
+        return out
+    end
     local vendors = db.vend and db.vend[itemID]
     if type(vendors) ~= "table" then return out end
-    local faction = GP.Player and GP.Player().faction
     for _, npcID in ipairs(vendors) do
         local side = db.nfac and db.nfac[npcID]
         local friendly = not side or not faction or side == "AH"
@@ -282,7 +294,8 @@ function QR.Order(quests, position, complete, rank)
     end
     for _, t in ipairs(tasks) do
         if t.kind == "objective" and t.spots then
-            t.spawns = t.spots
+            -- 1.6.1: buying: the vendor nearest to where you are now (not to where the route would be by then).
+            t.p = spotVia(t.spots, position) or t.p
         elseif t.kind == "objective" and t.ref then
             t.spawns = nearbySpawns(db, t.ref, t.p)
             if #t.spawns == 0 then t.spawns = nil end
