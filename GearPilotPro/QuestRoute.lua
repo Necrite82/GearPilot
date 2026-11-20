@@ -147,6 +147,13 @@ function QR.ChainReward(children, id, own, depth, seen)
     return bestGain, bestItem, bestQuest
 end
 
+-- Escort quests: ForeverDB marks them with the party-accept flag (qx[12] bit 2) and the event flag (qx[13] bit 2).
+local function bit2(value) return math.floor((tonumber(value) or 0) / 2) % 2 == 1 end
+function QR.IsEscort(db, id)
+    local detail = db and db.qx and db.qx[id]
+    return type(detail) == "table" and bit2(detail[12]) and bit2(detail[13]) or false
+end
+
 -- Quests worth doing now: available or in your log, with giver, turn-in and objective places and a value.
 function QR.Candidates(db, ctx)
     local list = {}
@@ -171,6 +178,7 @@ function QR.Candidates(db, ctx)
                     objectives = objectives(db, id, giver or ender), xp = xp, gain = gain, reward = reward,
                     rewardQuest = rewardQuest ~= id and rewardQuest or nil,
                     value = xp + gain * (ctx.weight or QR.focus.balanced),
+                    escort = QR.IsEscort(db, id), skipped = ctx.skip and ctx.skip(id) or false,
                 }
             end
         end
@@ -223,8 +231,11 @@ end
 -- Tasks of a zone in order: nearest first; a quest's objectives after accepting it, its turn-in after them.
 -- A quest whose objectives are unknown and that you turn in where you took it is probably "go and do something":
 -- its turn-in waits until the rest of the zone is done (or until the game says the quest is complete).
-function QR.Order(quests, position, complete)
+function QR.Order(quests, position, complete, rank)
     local db = ForeverDB
+    -- 1.5.0: your own order (rank by quest): the ready step of the highest quest comes first; quests you have not
+    -- placed follow after them, nearest first.
+    local ranked = type(rank) == "table" and next(rank) ~= nil
     local tasks = {}
     for _, q in ipairs(quests) do
         local accepted = q.active
@@ -266,7 +277,7 @@ function QR.Order(quests, position, complete)
         return false
     end
     for _ = 1, #tasks do
-        local pick, pickDistance, pickPoint
+        local pick, pickDistance, pickPoint, pickRank
         for i, t in ipairs(tasks) do
             if not used[i] then
                 local ready = t.kind == "accept" or (t.kind == "objective" and accepted[t.quest.id])
@@ -276,7 +287,10 @@ function QR.Order(quests, position, complete)
                     -- Objectives: the spawn nearest to where you are now, not the one next to the giver.
                     local p = t.spawns and spotVia(t.spawns, here) or t.p
                     local d = distance(here, p)
-                    if not pick or d < pickDistance then pick, pickDistance, pickPoint = i, d, p end
+                    local r = ranked and (rank[t.quest.id] or math.huge) or 0
+                    if not pick or r < pickRank or (r == pickRank and d < pickDistance) then
+                        pick, pickDistance, pickPoint, pickRank = i, d, p, r
+                    end
                 end
             end
         end
@@ -284,7 +298,7 @@ function QR.Order(quests, position, complete)
         -- 1.4.0: objectives and turn-ins of quests you already have that lie on the way to that step come first,
         -- so you do them in passing instead of walking past them.
         local share = GP.settings and GP.settings.routeDetour or QR.DETOUR_SHARE
-        local limit = share > 0 and math.max(QR.DETOUR_MIN, pickDistance * share) or -1
+        local limit = (share > 0 and not (ranked and pickRank < math.huge)) and math.max(QR.DETOUR_MIN, pickDistance * share) or -1
         local onWay, onWayDistance, onWayPoint
         for i, t in ipairs(tasks) do
             if not used[i] and i ~= pick and t.p and (t.kind == "objective" or t.kind == "turnin") then
@@ -313,17 +327,41 @@ end
 -- The plan: the best zone, its best quests (at most MAX_QUESTS) in order, the next zone after it.
 function QR.Plan(db, ctx)
     local candidates = QR.Candidates(db, ctx)
-    local zones = QR.Zones(candidates, ctx.position)
+    -- Skipped quests and (when hidden) escort quests stay out; the picker still lists them.
+    local usable = {}
+    for _, q in ipairs(candidates) do
+        if not q.skipped and not (ctx.hideEscort and q.escort and not q.active) then usable[#usable + 1] = q end
+    end
+    if ctx.mine then
+        -- My route: only the quests you picked (and the follow-ups of picked quests you have done).
+        local byID = {}
+        for _, q in ipairs(usable) do byID[q.id] = q end
+        for id in pairs(ctx.mine) do
+            if ctx.done(id) then
+                for _, child in ipairs(QR.children and QR.children[id] or {}) do
+                    if byID[child] then ctx.mine[child] = true end
+                end
+            end
+        end
+        local quests, xp = {}, 0
+        for _, q in ipairs(usable) do
+            if ctx.mine[q.id] then quests[#quests + 1] = q; xp = xp + q.xp end
+        end
+        table.sort(quests, function(a, b) return a.value > b.value end)
+        return { mine = true, zones = {}, quests = quests, xp = xp, candidates = candidates,
+            tasks = QR.Order(quests, ctx.position, ctx.complete, ctx.rank) }
+    end
+    local zones = QR.Zones(usable, ctx.position)
     local zone = zones[1]
-    if not zone then return { zones = zones, tasks = {}, quests = {}, xp = 0 } end
+    if not zone then return { zones = zones, tasks = {}, quests = {}, xp = 0, candidates = candidates } end
     local quests = {}
     for _, q in ipairs(zone.quests) do quests[#quests + 1] = q end
     table.sort(quests, function(a, b) return a.value > b.value end)
     while #quests > QR.MAX_QUESTS do table.remove(quests) end
     local xp = 0
     for _, q in ipairs(quests) do xp = xp + q.xp end
-    return { zone = zone, zones = zones, quests = quests, xp = xp, next = zones[2],
-        tasks = QR.Order(quests, ctx.position, ctx.complete) }
+    return { zone = zone, zones = zones, quests = quests, xp = xp, next = zones[2], candidates = candidates,
+        tasks = QR.Order(quests, ctx.position, ctx.complete, ctx.rank) }
 end
 
 -- Nearest flight point of your faction (ForeverDB taxi: name, continent, x, y, z, flags, Horde, Alliance).
@@ -389,9 +427,13 @@ end
 function QR.Current()
     local db = ForeverDB
     if not db then return nil end
-    if QR.plan then return QR.plan end
-    local player = GP.Player()
     local s = GP.settings
+    -- A changed route setting (focus, dungeon or escort quests, automatic or your own) means a new plan.
+    local key = table.concat({ tostring(s.routeFocus), tostring(s.routeDungeon), tostring(s.routeEscort), tostring(s.routeMode),
+        tostring(s.routeDetour) }, ":")
+    if QR.plan and QR.planKey == key then return QR.plan end
+    QR.planKey = key
+    local player = GP.Player()
     local twins = GP.Sources.Twins(db)
     QR.children = QR.children or QR.Children(db)
     -- Rewards are judged once and kept until your gear, your level or item data changes.
@@ -407,6 +449,10 @@ function QR.Current()
         grey = GP.Planner.GreyLevel(player.level), position = QR.Position(),
         done = GP.Sources.QuestDone, active = onQuest, complete = complete,
         includeDungeon = s.routeDungeon == true, weight = QR.focus[s.routeFocus or "balanced"] or QR.focus.balanced,
+        skip = function(id) return s.routeSkip and s.routeSkip[id] == true end,
+        hideEscort = s.routeEscort ~= true,
+        mine = s.routeMode == "mine" and s.routeMine or nil,
+        rank = QR.Rank(),
         xp = function(id, level)
             if xpCache[id] == nil then
                 local value = GP.QuestXP.Get(id, level)
@@ -439,6 +485,71 @@ function QR.Current()
     return QR.plan
 end
 function QR.Invalidate() QR.plan = nil end
+
+-- 1.5.0: skip, your own order and your own route (all per character).
+local function store()
+    local s = GP.settings
+    s.routeSkip = type(s.routeSkip) == "table" and s.routeSkip or {}
+    s.routeOrder = type(s.routeOrder) == "table" and s.routeOrder or {}
+    s.routeMine = type(s.routeMine) == "table" and s.routeMine or {}
+    return s
+end
+QR.Store = store
+local function changed()
+    QR.Invalidate()
+    if GP.ScheduleRefresh then GP.ScheduleRefresh() end
+    if GP.Tracker then GP.Tracker.Refresh() end
+end
+function QR.Rank()
+    local s = GP.settings
+    local rank = {}
+    for i, id in ipairs(type(s.routeOrder) == "table" and s.routeOrder or {}) do rank[id] = i end
+    return rank
+end
+function QR.Skip(id, on)
+    local s = store()
+    s.routeSkip[id] = on ~= false or nil
+    changed()
+end
+function QR.Skipped()
+    local list = {}
+    for id in pairs(store().routeSkip) do list[#list + 1] = id end
+    table.sort(list)
+    return list
+end
+function QR.Ordered() return #store().routeOrder > 0 end
+-- Moves a quest one place up (-1) or down (1). The first move takes the current order as your own.
+function QR.Move(id, direction)
+    local s = store()
+    local order = s.routeOrder
+    if #order == 0 then
+        local seen = {}
+        for _, t in ipairs(QR.plan and QR.plan.tasks or {}) do
+            if not seen[t.quest.id] and not QR.TaskDone(t) then seen[t.quest.id] = true; order[#order + 1] = t.quest.id end
+        end
+    end
+    local index
+    for i, other in ipairs(order) do if other == id then index = i end end
+    if not index then order[#order + 1] = id; index = #order end
+    local target = index + direction
+    if target < 1 or target > #order then return end
+    order[index], order[target] = order[target], order[index]
+    changed()
+end
+function QR.ResetOrder()
+    store().routeOrder = {}
+    changed()
+end
+function QR.InMine(id) return store().routeMine[id] == true end
+function QR.SetMine(id, on)
+    local s = store()
+    s.routeMine[id] = on and true or nil
+    changed()
+end
+function QR.SetMode(mode)
+    store().routeMode = mode
+    changed()
+end
 
 -- A task is done when its quest moved past it.
 -- A task keeps its key when the plan is built again (new tables after every quest log update).

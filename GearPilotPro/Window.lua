@@ -416,9 +416,24 @@ local goldLabel = S.Text(maxPill, "GameFontHighlightSmall", maxPill:GetWidth() +
 goldLabel:SetTextColor(.88, .69, .31)
 maxPill:SetWidth(maxPill:GetWidth() + 74)
 segmentPill({ "bags" }, "View", 110, { { "upgrades", "Upgrades" }, { "clutter", "Can go" } }, "views.bags", "upgrades")
-segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
-segmentPill({ "route" }, "Dungeon quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeDungeon", false)
-actionPill({ "route" }, "Route", 90, {
+-- 1.5.0: the route page has views: the route, choosing quests for your own route, your quest log, remembered
+-- and skipped quests.
+local function routeView() return GP.settings.views.route or "route" end
+segmentPill({ "route" }, "View", 96, { { "route", "Route" }, { "pick", "Choose quests" }, { "log", "Quest log" },
+    { "later", "Remembered" }, { "skipped", "Skipped" } }, "views.route", "route")
+local routeMode = segmentPill({ "route" }, "Route from", 110, { { "auto", "Automatic" }, { "mine", "My quests" } }, "routeMode", "auto")
+routeMode.when = function() local v = routeView(); return v == "route" or v == "pick" end
+local routeFocus = segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
+routeFocus.when = function() return routeView() == "route" and GP.settings.routeMode ~= "mine" end
+local routeDungeon = segmentPill({ "route" }, "Dungeon quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeDungeon", false)
+routeDungeon.when = function() local v = routeView(); return v == "route" or v == "pick" end
+local routeEscort = segmentPill({ "route" }, "Escort quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeEscort", false)
+routeEscort.when = function() return routeView() == "route" end
+local pickRange = segmentPill({ "route" }, "Show", 110, { { "near", "Nearby" }, { "all", "All zones" } }, "routePick", "near")
+pickRange.when = function() return routeView() == "pick" end
+local routeOrder = actionPill({ "route" }, "Own order", 120, { { "Automatic order", function() GP.QuestRoute.ResetOrder() end } })
+routeOrder.when = function() return routeView() == "route" and GP.QuestRoute.Ordered() end
+local routeActions = actionPill({ "route" }, "Route", 90, {
     { "Go", function()
         GP.QuestRoute.Follow(true, true)
         if GP.Tracker then GP.Tracker.Show() end
@@ -442,6 +457,7 @@ actionPill({ "route" }, "Route", 90, {
     end },
     { "Stop", function() GP.QuestRoute.Follow(false) end },
 })
+routeActions.when = function() return routeView() == "route" end
 segmentPill({ "gear" }, "View", 110, { { "worn", "Equipped" }, { "weapons", "Weapon setup" } }, "views.gear", "worn")
 segmentPill({ "gear" }, "Weapons from", 110, { { "own", "Worn & bags" }, { "all", "All sources" } }, "weaponPool", "own")
 segmentPill({ "wishlist" }, "View", 130, { { "list", "My wishlist" }, { "bis", "BIS (calculated)" } }, "views.wishlist", "list")
@@ -764,6 +780,25 @@ local function actions(first, second, third)
     detailY = detailY + 34
 end
 
+-- A row of small buttons in the details (1.5.0: route order, skip, your own route).
+U.tools = {}
+local function tools(list)
+    local x = 12
+    for i, entry in ipairs(list) do
+        local b = U.tools[i]
+        if not b then b = S.Button(U.detail, 100, 24, "", nil); U.tools[i] = b end
+        b:SetText(entry[1])
+        b:SetWidth(entry[3] or 100)
+        b:SetScript("OnClick", entry[2])
+        b:SetEnabled(entry[4] ~= false)
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", U.detail, "TOPLEFT", x, -detailY)
+        b:Show()
+        x = x + (entry[3] or 100) + 6
+    end
+    detailY = detailY + 32
+end
+
 -- Value bars like CraftPilot: each bar grows from the middle, right for a gain and left for a loss; its length
 -- is the weighted effect on the score, so the bars show what makes an item better.
 U.bars = {}
@@ -961,6 +996,7 @@ local function resetDetail()
     U.action:Hide()
     U.action2:Hide()
     U.action3:Hide()
+    for _, b in ipairs(U.tools) do b:Hide() end
     U.chainToggle:Hide()
     U.wishButton:Hide()
     U.togoButton:Hide()
@@ -1708,6 +1744,14 @@ local function showRouteTask(data, profile, equipped)
         if uiMap and x then GP.Map.Show(title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
             title = title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil, infoQuest = q.id } }) end
     end, 90 })
+    -- 1.5.0: your own order, skip, your own route.
+    local mine = GP.settings.routeMode == "mine"
+    tools({
+        { L("Earlier"), function() QR.Move(q.id, -1) end, 90 },
+        { L("Later"), function() QR.Move(q.id, 1) end, 90 },
+        { L("Skip"), function() QR.Skip(q.id, true) end, 100 },
+        mine and { L("Remove from my route"), function() QR.SetMine(q.id, false) end, 170 } or nil,
+    })
     -- The gear on the way: this quest's reward or the one at the end of its chain.
     if q.reward and (q.gain or 0) > 0 then
         section(L("Gear on the way"))
@@ -1717,6 +1761,85 @@ local function showRouteTask(data, profile, equipped)
     end
     local chain = GP.Route.Chain(q.id)
     if #chain > 1 then chainSteps(chain, q.id) end
+end
+
+-- 1.5.0 details: a quest to choose, a quest in your log, a remembered and a skipped quest.
+local function questHead(id, title, sub)
+    local inLog = GP.QuestInfo.LogIndex(id) ~= nil
+    title = GP.QuestInfo.Title(id, title)
+    showHead(inLog and "Interface\\GossipFrame\\ActiveQuestIcon" or "Interface\\GossipFrame\\AvailableQuestIcon", title, sub)
+    U.detailQuest, U.detailQuestTitle = id, title
+    return title
+end
+local function questMetrics(id, level, xp, gain)
+    local width = (U.detail:GetWidth() or 300) - 24
+    S.Metrics(U.detail, {
+        { label = L("Experience"), value = (xp or 0) > 0 and GP.QuestXP.Text(xp) or "-", color = C.gold, emphasis = true },
+        { label = L("Best reward"), value = (gain or 0) > 0 and signed(gain) or "-", color = C.green },
+        { label = L("Quest level"), value = tostring(level or "?"), color = C.text },
+    }, 12, detailY, width)
+    detailY = detailY + 60
+end
+local function questObjectives(id)
+    local targets = GP.QuestInfo.Targets(id)
+    if #targets > 0 then detailLine("GameFontHighlightSmall", L("Objective") .. ": " .. table.concat(targets, ", ")) end
+end
+local function showPick(data)
+    local QR, q = GP.QuestRoute, data.q
+    local giver = ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef)
+    local title = questHead(q.id, q.title, (giver or "?") .. (q.zoneName and (", " .. q.zoneName) or ""))
+    questMetrics(q.id, q.level, q.xp, q.gain)
+    questObjectives(q.id)
+    if q.escort then detailLine("GameFontDisableSmall", L("Escort quest."), C.muted) end
+    if q.skipped then detailLine("GameFontDisableSmall", L("You skipped this quest; adding it to your route takes it back."), C.muted) end
+    local mine = QR.InMine(q.id)
+    actions({ mine and L("Remove from my route") or L("Add to my route"), function()
+            if not mine and q.skipped then QR.Skip(q.id, false) end
+            QR.SetMine(q.id, not mine)
+        end, 180 },
+        { L("Waypoint"), function() GP.Route.ToGiver(q.id) end, 110 },
+        { L("Map"), function() GP.Map.Quests(title, { q.id }) end, 80 })
+    if GP.settings.routeMode ~= "mine" then
+        detailLine("GameFontDisableSmall", L("Your picks become the route when Route from is set to My quests."), C.muted)
+    end
+    local chain = GP.Route.Chain(q.id)
+    if #chain > 1 then chainSteps(chain, q.id) end
+end
+local function showLogQuest(data)
+    local e = data.entry
+    questHead(e.id, e.title, e.reason)
+    questMetrics(e.id, e.level, e.xp, e.gain)
+    questObjectives(e.id)
+    local full, count, max = GP.QuestLog.Full()
+    detailLine("GameFontDisableSmall", (L("Quest log %d/%d"):format(count, max)) .. (full and (" · |cffeb786b" .. L("full") .. "|r") or ""), C.muted)
+    if not e.complete then
+        actions({ L("Remember and abandon"), function() GP.QuestLog.Abandon(e.id, e.title, e.level, true) end, 190 },
+            { L("Abandon"), function() GP.QuestLog.Abandon(e.id, e.title, e.level, false) end, 110 })
+        detailLine("GameFontDisableSmall", L("Remembered quests stay under Remembered with a waypoint to their quest giver, to take again later."), C.muted)
+    end
+    local chain = GP.Route.Chain(e.id)
+    if #chain > 1 then chainSteps(chain, e.id) end
+end
+local function showLater(data)
+    local e = data.entry
+    local title = questHead(e.id, e.title, e.inLog and L("in quest log") or L("remembered"))
+    local xp = GP.QuestXP.Get(e.id, e.level).xp
+    questMetrics(e.id, e.level, xp, 0)
+    questObjectives(e.id)
+    actions({ L("Waypoint"), function() GP.Route.ToGiver(e.id) end, 140 },
+        { L("Map"), function() GP.Map.Quests(title, { e.id }) end, 90 },
+        { L("Remove"), function() GP.QuestLog.Forget(e.id) end, 100 })
+    local chain = GP.Route.Chain(e.id)
+    if #chain > 1 then chainSteps(chain, e.id) end
+end
+local function showSkipped(data)
+    local db = ForeverDB
+    local row = db and db.quest and db.quest[data.id]
+    questHead(data.id, row and row[1], L("skipped"))
+    questMetrics(data.id, row and row[2], GP.QuestXP.Get(data.id, row and row[2]).xp, 0)
+    questObjectives(data.id)
+    actions({ L("Back into the route"), function() GP.QuestRoute.Skip(data.id, false) end, 180 },
+        { L("Waypoint"), function() GP.Route.ToGiver(data.id) end, 110 })
 end
 
 local function showClutter(data, total)
@@ -2026,8 +2149,50 @@ end
 
 -- What the list of a page shows: kind and data.
 -- Quest route: the open tasks of the plan (a travel row first when the zone is far away), and the summary.
+-- 1.5.0 views of the route page.
+local function routeViewData(view)
+    local QR = GP.QuestRoute
+    local plan = QR.Current()
+    if not plan then return {}, false, { missing = true }, "route" end
+    local list = {}
+    if view == "pick" then
+        -- Every quest you can take (or have), nearby or in all zones, best first; your picks marked.
+        local here = QR.Position()
+        local near = (GP.settings.routePick or "near") == "near"
+        for _, q in ipairs(plan.candidates or {}) do
+            local p = q.giver or q.ender
+            if not near or not here or (p and QR.Distance(here, p) < 2500) then
+                list[#list + 1] = { key = "pick:" .. q.id, q = q, mine = QR.InMine(q.id) }
+            end
+        end
+        table.sort(list, function(a, b)
+            if a.mine ~= b.mine then return a.mine end
+            if (a.q.zoneName or "") ~= (b.q.zoneName or "") then return (a.q.zoneName or "") < (b.q.zoneName or "") end
+            return a.q.value > b.q.value
+        end)
+        local count, max = #GP.QuestLog.Quests(), GP.QuestLog.Max()
+        GP.routeSummary = (L("%d quests to choose from"):format(#list)) .. "  ·  " .. (L("quest log %d/%d"):format(count, max))
+        return list, false, {}, "routepick"
+    elseif view == "log" then
+        for _, entry in ipairs(GP.QuestLog.Ranked()) do list[#list + 1] = { key = "log:" .. entry.id, entry = entry } end
+        local count, max = #GP.QuestLog.Quests(), GP.QuestLog.Max()
+        GP.routeSummary = (L("Quest log %d/%d"):format(count, max)) .. "  ·  " .. L("best to abandon first")
+        return list, false, {}, "questlog"
+    elseif view == "later" then
+        for _, entry in ipairs(GP.QuestLog.LaterList()) do list[#list + 1] = { key = "later:" .. entry.id, entry = entry } end
+        GP.routeSummary = L("Quests you abandoned to take again later")
+        return list, false, {}, "questlater"
+    else
+        for _, id in ipairs(QR.Skipped()) do list[#list + 1] = { key = "skip:" .. id, id = id } end
+        GP.routeSummary = L("Quests you took out of the route")
+        return list, false, {}, "routeskip"
+    end
+end
+
 local function routeData(player)
     local QR = GP.QuestRoute
+    local view = GP.settings.views.route or "route"
+    if view ~= "route" then return routeViewData(view) end
     local plan = QR.Current()
     if not plan then return {}, false, { missing = true }, "route" end
     local list = {}
@@ -2044,6 +2209,7 @@ local function routeData(player)
     end
     -- Summary: zone, quests, experience and how far it gets you.
     local parts = {}
+    if plan.mine then parts[#parts + 1] = L("My route") end
     if zone then parts[#parts + 1] = zone.name or "?" end
     parts[#parts + 1] = (L("%d quests"):format(#plan.quests))
     if plan.xp > 0 then
@@ -2339,6 +2505,13 @@ local function emptyMessage(page, kind, loading, states)
     end
     if (GP.settings.slotFilter or "all") ~= "all" then return L("No upgrades for this slot. Choose all slots or another slot.") end
     if kind == "clutter" then return L("Nothing to get rid of: all gear in your bags is useful.") end
+    if kind == "routepick" then return L("No quests you can take here. Try All zones.") end
+    if kind == "questlog" then return L("Your quest log is empty.") end
+    if kind == "questlater" then return L("No remembered quests. Abandon a quest with Remember under Quest log to find it here again.") end
+    if kind == "routeskip" then return L("No skipped quests.") end
+    if page == "route" and GP.settings.routeMode == "mine" then
+        return L("Your own route is empty. Choose quests under Choose quests and add them with Add to my route.")
+    end
     if page == "route" then return L("No quests worth doing found near your level. Grey quests and quests you have done are left out.") end
     if page == "dungeons" and (GP.settings.views.dungeons or "items") == "togo" then
         return L("Your to go list is empty. Open a dungeon under Per dungeon and add it with + To go.")
@@ -2457,6 +2630,43 @@ local function fillRow(r, kind, data, width, list)
             r.value:SetText((t.kind == "turnin" and t.quest.xp > 0) and GP.QuestXP.Text(t.quest.xp) or "")
             color(r.value, C.gold)
         end
+    elseif kind == "routepick" or kind == "questlog" or kind == "questlater" or kind == "routeskip" then
+        local id, title, level
+        if kind == "routepick" then id, title, level = data.q.id, data.q.title, data.q.level
+        elseif kind == "routeskip" then id = data.id
+        else id, title, level = data.entry.id, data.entry.title, data.entry.level end
+        local db = ForeverDB
+        local row = db and db.quest and db.quest[id]
+        title = GP.QuestInfo.Title(id, title or (row and row[1]))
+        level = level or (row and row[2])
+        GP.QuestInfo.Set(r.quest, id, title)
+        local inLog = GP.QuestInfo.LogIndex(id) ~= nil
+        r.icon:SetTexture((kind == "routepick" and data.mine) and "Interface\\RaidFrame\\ReadyCheck-Ready"
+            or inLog and "Interface\\GossipFrame\\ActiveQuestIcon" or "Interface\\GossipFrame\\AvailableQuestIcon")
+        r.name:SetText(title)
+        local sub = {}
+        if level and level > 0 then sub[#sub + 1] = (L("Level %d")):format(level) end
+        local value = ""
+        if kind == "routepick" then
+            local q = data.q
+            if q.zoneName then sub[#sub + 1] = q.zoneName end
+            if q.active then sub[#sub + 1] = "|cffe0b050" .. L("in quest log") .. "|r" end
+            if q.escort then sub[#sub + 1] = L("escort") end
+            if q.skipped then sub[#sub + 1] = L("skipped") end
+            value = q.xp > 0 and GP.QuestXP.Text(q.xp) or ""
+        elseif kind == "questlog" then
+            local e = data.entry
+            local c = e.advice == "abandon" and "|cffeb786b" or e.advice == "remember" and "|cffe0b050" or "|cff9dabb8"
+            sub[#sub + 1] = c .. e.reason .. "|r"
+            value = e.xp > 0 and GP.QuestXP.Text(e.xp) or ""
+        elseif kind == "questlater" then
+            sub[#sub + 1] = data.entry.inLog and ("|cffe0b050" .. L("in quest log") .. "|r") or L("remembered")
+        else
+            sub[#sub + 1] = L("skipped")
+        end
+        r.sub:SetText(table.concat(sub, " · "))
+        r.value:SetText(value)
+        color(r.value, C.gold)
     elseif kind == "clutter" then
         r.icon:SetTexture(item.icon)
         r.name:SetText(S.QualityColor(item.quality) .. item.name .. "|r")
@@ -2602,6 +2812,14 @@ function GP.Render()
         showClutter(found, list.total)
     elseif kind == "route" then
         showRouteTask(found, profile, equipped)
+    elseif kind == "routepick" then
+        showPick(found)
+    elseif kind == "questlog" then
+        showLogQuest(found)
+    elseif kind == "questlater" then
+        showLater(found)
+    elseif kind == "routeskip" then
+        showSkipped(found)
     else
         showUpgrade(found, profile)
     end

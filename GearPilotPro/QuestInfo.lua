@@ -212,7 +212,8 @@ function QI.Show(owner, questID, fallback, opts, reloaded)
     tip:AddLine(" ")
     if opts.hint then tip:AddLine(opts.hint, .88, .69, .31) end
     tip:AddLine(L("Shift-click: link in chat"), .62, .67, .72)
-    if inLog then tip:AddLine(L("Right-click: share with your group"), .62, .67, .72) end
+    if opts.right then tip:AddLine(opts.right, .62, .67, .72)
+    elseif inLog then tip:AddLine(L("Right-click: share with your group"), .62, .67, .72) end
     tip:Show()
     if not reloaded and C_QuestLog and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, questID) end
     QI.busy = false
