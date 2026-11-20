@@ -1587,7 +1587,11 @@ local function showDungeon(dungeon, profile, equipped)
         end
     end
     if row.raid and d and not GP.ForeverRaid(d.name) then
-        detailLine("GameFontDisableSmall", L("Classic raid: not announced for WoW Forever. Its loot only counts in the BIS list with raids."), C.muted)
+        detailLine("GameFontDisableSmall", L("Classic raid: not announced for WoW Forever. Its loot does not count in the BIS lists."), C.muted)
+    end
+    local opens = row.raid and d and GP.RaidOpens(d.name)
+    if opens then
+        detailLine("GameFontHighlightSmall", (L("Opens %s (provisional date). You can do the access quests already."):format(opens)), C.gold)
     end
     -- 1.6.1: access quests (Drakefire Amulet, dungeon keys): the chain with its status and the next step.
     local access = d and GP.Access.For(d.name) or {}
@@ -2103,6 +2107,12 @@ local function sourceShort(row)
     if row.source == "Crafted" then return L(professionNames[row.profession] or row.profession or "") end
     return ""
 end
+-- " · opens 09.12.2026 (provisional)" for loot of a raid that is not open yet.
+local function raidOpensText(row)
+    local name = row and ((row.raid and row.name) or (row.raidQuest and row.dungeonQuest))
+    local opens = name and GP.RaidOpens(name)
+    return opens and (" · " .. (L("opens %s (provisional)"):format(opens))) or ""
+end
 function GP.BisList(s, low, high, profile, player, equipped)
     local target = s.bisTarget or "now"
     local maxLevel = target == "now" and high or 60
@@ -2119,7 +2129,7 @@ function GP.BisList(s, low, high, profile, player, equipped)
                 list[#list + 1] = { kind = "bis", bis = true, key = "bis:" .. best.slot, id = id, item = best.item, slot = best.slot,
                     score = best.score, owned = worn or GP.Wish.Owned(id),
                     result = P.Compare(best.item, equipped, profile, player.class, player.level),
-                    sourceText = sourceShort(best.entry and best.entry.row) }
+                    sourceText = sourceShort(best.entry and best.entry.row) .. raidOpensText(best.entry and best.entry.row) }
             end
         end
         return list
@@ -2140,6 +2150,8 @@ function GP.BisList(s, low, high, profile, player, equipped)
         local required = info and info[3] or 0
         local wanted = required <= maxLevel and required >= minLevel and not seen[row.itemID]
             and (target == "raid" or not (row.raid or row.raidQuest))
+            -- 1.6.1: raid loot only from raids confirmed for WoW Forever (not the Classic ones in the data).
+            and not (row.raid and not GP.ForeverRaid(row.name)) and not (row.raidQuest and not GP.ForeverRaid(row.dungeonQuest))
         if wanted then
             -- Cheap check before loading the item: armor type and weapon class from ForeverDB.
             local light = { classID = info[5], subclassID = info[6], equip = P.inventoryTypes[info[7]], minLevel = required }
@@ -2626,6 +2638,8 @@ local function fillRow(r, kind, data, width, list)
         local missing = data.catalog and GP.Access.Missing(data.catalog.name)
         if missing then parts[#parts + 1] = "|cffe0b050" .. L("access open") .. "|r" end
         if data.row.raid and data.catalog and not GP.ForeverRaid(data.catalog.name) then parts[#parts + 1] = L("Classic") end
+        local opens = data.row.raid and data.catalog and GP.RaidOpens(data.catalog.name)
+        if opens then parts[#parts + 1] = "|cffe0b050" .. (L("opens %s (provisional)"):format(opens)) .. "|r" end
         if #data.results > 0 then parts[#parts + 1] = (L("%d upgrades"):format(#data.results)) end
         if (data.openQuests or 0) > 0 then
             parts[#parts + 1] = (L("%d open quests"):format(data.openQuests))

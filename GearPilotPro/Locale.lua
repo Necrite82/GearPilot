@@ -402,8 +402,10 @@ local de = {
     -- 1.6.1 raids and access
     ["Raids"] = "Raids", ["WoW Forever"] = "WoW Forever", ["All raids"] = "Alle Raids",
     ["Raids, their loot for you and the quests to get in"] = "Raids, ihre Beute für dich und die Quests für den Zugang",
-    ["Classic raid: not announced for WoW Forever. Its loot only counts in the BIS list with raids."] =
-        "Classic-Raid: für WoW Forever nicht angekündigt. Seine Beute zählt nur in der BIS-Liste mit Raids.",
+    ["Classic raid: not announced for WoW Forever. Its loot does not count in the BIS lists."] =
+        "Classic-Raid: für WoW Forever nicht angekündigt. Seine Beute zählt in den BIS-Listen nicht.",
+    ["opens %s (provisional)"] = "öffnet %s (vorläufig)",
+    ["Opens %s (provisional date). You can do the access quests already."] = "Öffnet am %s (vorläufiges Datum). Die Zugangsquests kannst du schon machen.",
     ["Access"] = "Zugang", ["Every raid member needs it to enter."] = "Jedes Raidmitglied braucht ihn zum Betreten.",
     ["Classic key: not confirmed for WoW Forever yet."] = "Classic-Schlüssel: für WoW Forever noch nicht bestätigt.",
     ["Next step"] = "Nächster Schritt", ["Whole chain"] = "Ganze Reihe", ["Into my route"] = "In meine Route",

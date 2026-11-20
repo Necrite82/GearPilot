@@ -5,6 +5,8 @@
 - **Zugang:** Onyxias Hort mit der ganzen Reihe zum Drachenfeueramulett (Allianz und Horde) – Status „x von y erledigt“, Wegpunkt zum nächsten Schritt, ganze Reihe, und „In meine Route“. Raids und Dungeons mit offenem Zugang sind in der Liste markiert; „Quests sammeln“ und „Alle vorbereiten“ nehmen den nächsten Zugangsschritt mit.
 - **Dungeon-Schlüssel** aus Classic (Siegel des Aufstiegs, Skelettschlüssel, Schattenschmiedeschlüssel) mit Hinweis, dass sie für Forever noch nicht bestätigt sind.
 - Die Dungeon-Seite zeigt nur noch Dungeons.
+- **Öffnungsdatum:** Raids, die noch nicht offen sind, zeigen „öffnet 09.12.2026 (vorläufig)“ – die Zugangsquests kannst du trotzdem schon machen.
+- **BIS „60 mit Raids“** rechnet nur noch mit Raids, die für WoW Forever bestätigt sind (bisher Onyxias Hort); Beute aus noch geschlossenen Raids ist mit dem Öffnungsdatum markiert. Classic-Raids (Molten Core, Blackwing Lair, AQ, Naxxramas …) zählen nicht mehr.
 
 ## Questroute
 - **Kaufen beim nächsten Händler:** für Quest-Gegenstände vom Händler kennt GearPilot jetzt alle Händler (ForeverDB listet höchstens 30 pro Gegenstand, der nächste fehlte manchmal) und schickt dich zu dem, der dir gerade am nächsten ist – nicht zu einem in der Hauptstadt, nur weil die Route später dort vorbeikommt.
