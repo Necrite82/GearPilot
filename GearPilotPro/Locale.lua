@@ -399,6 +399,9 @@ local de = {
     ["Only quests in your quest log can be shared."] = "Teilen geht nur mit Quests in deinem Questlog.",
     ["You are not in a group."] = "Du bist in keiner Gruppe.", ["This quest cannot be shared."] = "Diese Quest kann nicht geteilt werden.",
     ["Shared: %s"] = "Geteilt: %s",
+    -- 1.4.0
+    ["Detour: objectives and turn-ins of quests you already have come first when they lie on the way to the next step and make the way at most this much longer (at least 60 m always count). Off: always the nearest step."] =
+        "Umweg: Ziele und Abgaben von Quests, die du schon hast, kommen zuerst dran, wenn sie auf dem Weg zum nächsten Schritt liegen und den Weg höchstens um so viel verlängern (60 m zählen immer). Aus: immer der nächstgelegene Schritt.",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

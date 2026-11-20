@@ -283,7 +283,8 @@ function QR.Order(quests, position, complete)
         if not pick then break end
         -- 1.4.0: objectives and turn-ins of quests you already have that lie on the way to that step come first,
         -- so you do them in passing instead of walking past them.
-        local limit = math.max(QR.DETOUR_MIN, pickDistance * QR.DETOUR_SHARE)
+        local share = GP.settings and GP.settings.routeDetour or QR.DETOUR_SHARE
+        local limit = share > 0 and math.max(QR.DETOUR_MIN, pickDistance * share) or -1
         local onWay, onWayDistance, onWayPoint
         for i, t in ipairs(tasks) do
             if not used[i] and i ~= pick and t.p and (t.kind == "objective" or t.kind == "turnin") then

@@ -1809,6 +1809,20 @@ local function renderSettings()
     text("GameFontHighlightSmall", L("To go list: remove a dungeon by itself once its quests are done and its wishlist items received."))
     toggle("togoAuto", "togoAutoRemove")
 
+    text("GameFontNormal", L("Quest route"), C.gold)
+    text("GameFontHighlightSmall", L("Detour: objectives and turn-ins of quests you already have come first when they lie on the way to the next step and make the way at most this much longer (at least 60 m always count). Off: always the nearest step."))
+    for i, value in ipairs({ 0, 0.15, 0.3, 0.5 }) do
+        local b = control("detour" .. i, 80, value == 0 and L("Off") or ("%d %%"):format(value * 100), function()
+            s.routeDetour = value
+            GP.QuestRoute.Invalidate()
+            GP.Render()
+        end)
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", U.pageContent, "TOPLEFT", 16 + (i - 1) * 88, -y)
+        S.Segment(b, s.routeDetour == value)
+    end
+    y = y + 40
+
     text("GameFontNormal", L("Stat profile"), C.gold)
     text("GameFontHighlightSmall", L("Automatic picks the profile from your talents. The weights are provisional and will be refined with player feedback."))
     local options = { { key = "auto", name = "Automatic (talents)" } }
