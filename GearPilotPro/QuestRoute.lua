@@ -73,8 +73,9 @@ function QR.VendorSpots(db, itemID)
     -- 1.6.1: the full vendor lists (ForeverDB keeps at most 30 vendors per item, the nearest can be missing).
     local full = GP.QuestVendors and GP.QuestVendors[itemID]
     if type(full) == "table" then
-        for _, v in ipairs(full) do
-            if friendly(v[5]) then out[#out + 1] = { v[2], v[3], v[4], v[1] } end
+        local sides = { [0] = "", [1] = "A", [2] = "H", [3] = "AH" }
+        for i = 1, #full, 5 do
+            if friendly(sides[full[i + 4]]) then out[#out + 1] = { full[i + 1], full[i + 2], full[i + 3], full[i] } end
         end
         return out
     end
@@ -746,9 +747,16 @@ function QR.OpenTasks(plan)
     return open
 end
 function QR.NextTask()
-    local first = QR.OpenTasks(QR.Current())[1]
-    if first then return first.t, first.index end
-    return nil
+    -- Same order as OpenTasks, without building the list (called every second while following).
+    local plan = QR.Current()
+    local waiting, waitingIndex
+    for i, t in ipairs(plan and plan.tasks or {}) do
+        if not QR.TaskDone(t) then
+            if not QR.Blocked(t) then return t, i end
+            if not waiting then waiting, waitingIndex = t, i end
+        end
+    end
+    return waiting, waitingIndex
 end
 -- 1.4.0: the route's previous TomTom point goes when the next step starts (or the route stops); the game's own
 -- waypoint is replaced anyway.
@@ -797,7 +805,21 @@ function QR.Follow(on, force)
 end
 
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA",
+-- Your quest log in short: which quests, which complete. QUEST_LOG_UPDATE comes with every kill or loot; the plan is
+-- only built again when this changes (1.6.2: less work and garbage while questing).
+local function logSignature()
+    local parts = {}
+    if C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo then
+        for i = 1, C_QuestLog.GetNumQuestLogEntries() or 0 do
+            local info = C_QuestLog.GetInfo(i)
+            if type(info) == "table" and not info.isHeader and info.questID then
+                parts[#parts + 1] = info.questID .. (complete(info.questID) and "+" or "")
+            end
+        end
+    end
+    return table.concat(parts, ",")
+end
+for _, event in ipairs({ "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA",
     "PLAYER_EQUIPMENT_CHANGED", "ITEM_DATA_LOAD_RESULT", "BAG_UPDATE_DELAYED" }) do
     events:RegisterEvent(event)
 end
@@ -806,7 +828,12 @@ events:SetScript("OnEvent", function(_, event)
     if event == "ITEM_DATA_LOAD_RESULT" and not QR.loading then return end
     if event == "ITEM_DATA_LOAD_RESULT" or event == "PLAYER_LEVEL_UP" or event == "PLAYER_EQUIPMENT_CHANGED" then QR.own = nil end
     -- Bags: a bought quest item finishes its step; the plan itself stays.
-    if event ~= "BAG_UPDATE_DELAYED" then QR.Invalidate() end
+    if event == "QUEST_LOG_UPDATE" then
+        local signature = logSignature()
+        if signature ~= QR.logSignature then QR.logSignature = signature; QR.Invalidate() end
+    elseif event ~= "BAG_UPDATE_DELAYED" then
+        QR.Invalidate()
+    end
     if pendingUpdate or not C_Timer then return end
     pendingUpdate = true
     C_Timer.After(0.6, function()

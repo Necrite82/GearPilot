@@ -171,6 +171,7 @@ function Stats.IsTool(item)
 end
 
 local cache = {}
+function Stats.ClearCache() cache = {} end
 function Stats.Read(link, item)
     if not link then return nil end
     if cache[link] then return cache[link] end
