@@ -142,9 +142,12 @@ end
 
 -- Tooltip: title, level, objectives (with progress for your own quests), story, experience, hints.
 -- opts: prefix (before the title), lines (extra grey lines), hint (extra click hint).
-function QI.Show(owner, questID, fallback, opts)
+function QI.Show(owner, questID, fallback, opts, reloaded)
     opts = opts or {}
-    QI.owner, QI.shown = owner, { questID, fallback, opts }
+    QI.owner, QI.shown = owner, { questID, fallback, opts, reloaded = reloaded }
+    -- 1.3.7: the game can answer a load request at once (inside this call); the busy flag and the single reload
+    -- keep that answer from showing the tooltip again and again (C stack overflow).
+    QI.busy = true
     local tip = GameTooltip
     tip:SetOwner(owner, "ANCHOR_RIGHT")
     local inLog = QI.LogIndex(questID) ~= nil
@@ -211,7 +214,8 @@ function QI.Show(owner, questID, fallback, opts)
     tip:AddLine(L("Shift-click: link in chat"), .62, .67, .72)
     if inLog then tip:AddLine(L("Right-click: share with your group"), .62, .67, .72) end
     tip:Show()
-    if C_QuestLog and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, questID) end
+    if not reloaded and C_QuestLog and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, questID) end
+    QI.busy = false
 end
 function QI.Hide(owner)
     if QI.owner == owner then QI.owner, QI.shown = nil, nil end
@@ -224,8 +228,9 @@ if CreateFrame then
     events:RegisterEvent("QUEST_DATA_LOAD_RESULT")
     events:SetScript("OnEvent", function(_, _, questID, ok)
         local shown = QI.shown
-        if ok and shown and shown[1] == questID and QI.owner and GameTooltip:IsOwned(QI.owner) then
-            QI.Show(QI.owner, shown[1], shown[2], shown[3])
+        if QI.busy or not ok or not shown or shown.reloaded then return end
+        if shown[1] == questID and QI.owner and GameTooltip:IsOwned(QI.owner) then
+            QI.Show(QI.owner, shown[1], shown[2], shown[3], true)
         end
     end)
 end
