@@ -229,7 +229,7 @@ local function navButton(key, caption)
 end
 local mainPages = {
     { key = "upgrades", label = L("Best upgrades") }, { key = "route", label = L("Quest route") }, { key = "quests", label = L("Quests") },
-    { key = "dungeons", label = L("Dungeons") }, { key = "shop", label = L("Buy & craft") },
+    { key = "dungeons", label = L("Dungeons") }, { key = "raids", label = L("Raids") }, { key = "shop", label = L("Buy & craft") },
     { key = "auction", label = L("Auction house") }, { key = "wishlist", label = L("Wishlist") },
     { key = "bags", label = L("Bags") }, { key = "gear", label = L("Equipped gear") },
 }
@@ -369,6 +369,7 @@ segmentPill({ "quests" }, "Sort", 90, { { "gain", "Score" }, { "distance", "Dist
 segmentPill({ "quests" }, "Quest chains", 100, { { "all", "All" }, { "started", "Started" } }, "chains", "all")
 segmentPill({ "quests" }, "Dungeon quests", 90, { { "show", "Show" }, { "hide", "Hide" }, { "only", "Only" } }, "dungeonQuests", "show")
 segmentPill({ "dungeons" }, "View", 110, { { "items", "Items" }, { "overview", "Per dungeon" }, { "togo", "To go" } }, "views.dungeons", "items")
+segmentPill({ "raids" }, "Show", 130, { { "forever", "WoW Forever" }, { "all", "All raids" } }, "raidShow", "forever")
 local dungeonShow = segmentPill({ "dungeons" }, "Show", 120, { { "all", "All dungeons" }, { "range", "Only in range" } }, "dungeonShow", "all")
 dungeonShow.when = function() return (GP.settings.views.dungeons or "items") == "overview" end
 local function togoDungeons()
@@ -1585,10 +1586,34 @@ local function showDungeon(dungeon, profile, equipped)
             detailY = detailY + 30
         end
     end
+    if row.raid and d and not GP.ForeverRaid(d.name) then
+        detailLine("GameFontDisableSmall", L("Classic raid: not announced for WoW Forever. Its loot only counts in the BIS list with raids."), C.muted)
+    end
+    -- 1.6.1: access quests (Drakefire Amulet, dungeon keys): the chain with its status and the next step.
+    local access = d and GP.Access.For(d.name) or {}
+    for _, a in ipairs(access) do
+        section(L("Access") .. ": " .. L(a.entry.label) .. "  |cff9dabb8" .. (a.complete and L("done")
+            or (L("%d of %d done"):format(a.done, a.total))) .. "|r")
+        if a.entry.required then
+            detailLine("GameFontHighlightSmall", L("Every raid member needs it to enter."), C.text)
+        end
+        if a.entry.confirmed == false then
+            detailLine("GameFontDisableSmall", L("Classic key: not confirmed for WoW Forever yet."), C.muted)
+        end
+        if not a.complete then
+            local buttons = {}
+            if a.next then buttons[#buttons + 1] = { L("Next step"), function() GP.Route.ToGiver(a.next.id) end, 110 } end
+            buttons[#buttons + 1] = { L("Whole chain"), function() GP.Route.ToChain(a.id) end, 110 }
+            buttons[#buttons + 1] = { L("Into my route"), function() GP.Access.ToMyRoute(a) end, 130 }
+            tools(buttons)
+            chainSteps(a.chain, "access:" .. a.id)
+        end
+    end
     -- Way there and preparation.
     local db = ForeverDB
     local entrance = db and GP.Sources.Entrance(db, d and d.name or row.name)
     local nextSteps = GP.Togo.NextSteps(quests)
+    for _, id in ipairs(d and GP.Access.NextSteps(d.name) or {}) do nextSteps[#nextSteps + 1] = id end
     local first = entrance and { L("Waypoint to the entrance"), function() GP.Route.ToSpot(entrance, name) end, 200 } or nil
     local second = #nextSteps > 0 and { (L("Collect quests (%d)")):format(#nextSteps), function() GP.Route.ToMany(nextSteps) end, 170 } or nil
     local map = (entrance or #nextSteps > 0) and { L("Map"), function()
@@ -2056,6 +2081,7 @@ local titles = {
     upgrades = { "Best upgrades", "Bags, quests and dungeons in your level range, best first" },
     quests = { "Quests", "Quest rewards that improve your gear" },
     dungeons = { "Dungeons", "Dungeon drops that improve your gear" },
+    raids = { "Raids", "Raids, their loot for you and the quests to get in" },
     shop = { "Buy & craft", "Vendors, auction house and crafting" },
     auction = { "Auction house", "Upgrades from your last Auctionator scan" },
     wishlist = { "Wishlist", "Items you want, where they come from and the way there" },
@@ -2305,8 +2331,10 @@ local function pageData(page, s, low, high, equipped, profile, player)
         end
         return list, loading, states, "upgrade"
     end
-    if page == "dungeons" then
-        local view = s.views.dungeons or "items"
+    if page == "dungeons" or page == "raids" then
+        -- 1.6.1: raids have their own page (per raid); the dungeon page lists dungeons only.
+        local raids = page == "raids"
+        local view = raids and "overview" or (s.views.dungeons or "items")
         if view == "items" then
             local list, loading, states = recommend({ "Dungeons" }, low, high, equipped, profile, player)
             return list, loading, states, "upgrade"
@@ -2354,8 +2382,12 @@ local function pageData(page, s, low, high, equipped, profile, player)
             return list, loading, states, "dungeon"
         end
         for _, d in ipairs(catalog) do
-            local entry = entryFor(d)
-            if entry.inRange or s.dungeonShow ~= "range" then list[#list + 1] = entry end
+            if raids then
+                if d.raid and (s.raidShow == "all" or GP.ForeverRaid(d.name)) then list[#list + 1] = entryFor(d) end
+            elseif not d.raid then
+                local entry = entryFor(d)
+                if entry.inRange or s.dungeonShow ~= "range" then list[#list + 1] = entry end
+            end
         end
         local level = player.level
         table.sort(list, function(a, b)
@@ -2514,6 +2546,7 @@ local function emptyMessage(page, kind, loading, states)
         return L("Your own route is empty. Choose quests under Choose quests and add them with Add to my route.")
     end
     if page == "route" then return L("No quests worth doing found near your level. Grey quests and quests you have done are left out.") end
+    if page == "raids" then return L("No raids in the data yet. New raids come with the weekly dungeon data.") end
     if page == "dungeons" and (GP.settings.views.dungeons or "items") == "togo" then
         return L("Your to go list is empty. Open a dungeon under Per dungeon and add it with + To go.")
     end
@@ -2589,6 +2622,10 @@ local function fillRow(r, kind, data, width, list)
         color(r.name, data.inRange and C.text or C.muted)
         local parts = { (L("Level %d–%d"):format(data.low, data.high)) }
         if not data.inRange then parts[#parts + 1] = L("outside your range") end
+        -- 1.6.1: an open access chain (attunement or key).
+        local missing = data.catalog and GP.Access.Missing(data.catalog.name)
+        if missing then parts[#parts + 1] = "|cffe0b050" .. L("access open") .. "|r" end
+        if data.row.raid and data.catalog and not GP.ForeverRaid(data.catalog.name) then parts[#parts + 1] = L("Classic") end
         if #data.results > 0 then parts[#parts + 1] = (L("%d upgrades"):format(#data.results)) end
         if (data.openQuests or 0) > 0 then
             parts[#parts + 1] = (L("%d open quests"):format(data.openQuests))

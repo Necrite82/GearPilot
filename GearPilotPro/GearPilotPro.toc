@@ -21,6 +21,7 @@ Planner.lua
 Data\Dungeons.lua
 Data\MapOverlays.lua
 Data\QuestVendors.lua
+Data\Attunements.lua
 Names.lua
 Sources.lua
 Route.lua
@@ -33,6 +34,7 @@ QuestXP.lua
 QuestInfo.lua
 QuestRoute.lua
 Togo.lua
+Access.lua
 QuestLog.lua
 Tracker.lua
 MapView.lua

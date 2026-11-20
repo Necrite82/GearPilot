@@ -88,7 +88,10 @@ function Togo.Prepare(dungeons)
     local ids, seen = {}, {}
     for _, d in ipairs(dungeons) do
         local quests = Togo.Quests(d)
-        for _, id in ipairs(Togo.NextSteps(quests)) do
+        local steps = Togo.NextSteps(quests)
+        -- 1.6.1: the next step of an open access chain (Drakefire Amulet, dungeon keys) comes along.
+        for _, id in ipairs(GP.Access and GP.Access.NextSteps(d.name) or {}) do steps[#steps + 1] = id end
+        for _, id in ipairs(steps) do
             if not seen[id] then
                 seen[id] = true
                 ids[#ids + 1] = id

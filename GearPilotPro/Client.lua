@@ -51,6 +51,10 @@ function GP.Catalog()
     end
     return GP.catalogList, GP.catalogByName
 end
+-- Raids in WoW Forever (Blizzard's raid overview, Oct 20, 2026: Barrow Deeps, Hyjal Summit, Onyxia's Lair). The
+-- Classic raids in the data (Molten Core, Blackwing Lair, ...) are not announced for Forever.
+GP.FOREVER_RAIDS = { ["Onyxia's Lair"] = true, ["Barrow Deeps"] = true, ["Hyjal Summit"] = true }
+function GP.ForeverRaid(name) return GP.FOREVER_RAIDS[name] == true end
 -- Range of your dungeons: from dungeonBelow levels below to dungeonAbove levels above your level.
 function GP.DungeonRange()
     local s = GP.settings
@@ -145,7 +149,7 @@ local function bounded(value, fallback, lower, upper)
     return math.max(lower, math.min(upper, math.floor(value)))
 end
 local chances = { [0.01] = true, [0.02] = true, [0.05] = true, [0.1] = true }
-local pages = { upgrades = true, route = true, quests = true, dungeons = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
+local pages = { upgrades = true, route = true, quests = true, dungeons = true, raids = true, shop = true, auction = true, wishlist = true, bags = true, gear = true, settings = true, help = true }
 local function initialize()
     local player = GP.Player()
     local saved = type(GearPilotProSettings) == "table" and GearPilotProSettings or {}

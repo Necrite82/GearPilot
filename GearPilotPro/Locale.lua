@@ -399,6 +399,19 @@ local de = {
     ["Only quests in your quest log can be shared."] = "Teilen geht nur mit Quests in deinem Questlog.",
     ["You are not in a group."] = "Du bist in keiner Gruppe.", ["This quest cannot be shared."] = "Diese Quest kann nicht geteilt werden.",
     ["Shared: %s"] = "Geteilt: %s",
+    -- 1.6.1 raids and access
+    ["Raids"] = "Raids", ["WoW Forever"] = "WoW Forever", ["All raids"] = "Alle Raids",
+    ["Raids, their loot for you and the quests to get in"] = "Raids, ihre Beute für dich und die Quests für den Zugang",
+    ["Classic raid: not announced for WoW Forever. Its loot only counts in the BIS list with raids."] =
+        "Classic-Raid: für WoW Forever nicht angekündigt. Seine Beute zählt nur in der BIS-Liste mit Raids.",
+    ["Access"] = "Zugang", ["Every raid member needs it to enter."] = "Jedes Raidmitglied braucht ihn zum Betreten.",
+    ["Classic key: not confirmed for WoW Forever yet."] = "Classic-Schlüssel: für WoW Forever noch nicht bestätigt.",
+    ["Next step"] = "Nächster Schritt", ["Whole chain"] = "Ganze Reihe", ["Into my route"] = "In meine Route",
+    ["No raids in the data yet. New raids come with the weekly dungeon data."] = "Noch keine Raids in den Daten. Neue Raids kommen mit den wöchentlichen Dungeondaten.",
+    ["access open"] = "Zugang offen", ["Classic"] = "Classic",
+    ["%d quests of the access chain are in your own route."] = "%d Quests der Zugangsreihe sind in deiner eigenen Route.",
+    ["Drakefire Amulet"] = "Drachenfeueramulett", ["Seal of Ascension (Upper Blackrock Spire)"] = "Siegel des Aufstiegs (Obere Schwarzfelsspitze)",
+    ["Skeleton Key"] = "Skelettschlüssel", ["Shadowforge Key"] = "Schattenschmiedeschlüssel",
     -- 1.6.0
     ["Buy"] = "Kaufen", ["%d in bags"] = "%d im Gepäck", ["This item is sold by a vendor; the route moves on once you have enough of it."] =
         "Diesen Gegenstand verkauft ein Händler; die Route geht weiter, sobald du genug davon hast.",
