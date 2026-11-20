@@ -59,6 +59,61 @@ go:SetPoint("RIGHT", fold, "LEFT", -4, 0)
 local summary = S.Text(frame, "GameFontDisableSmall", 12, 26, WIDTH - 24)
 summary:SetWordWrap(false)
 
+-- Quest log full: a red line under the summary; a click opens the quest log view with the suggestions.
+local warning = CreateFrame("Button", nil, frame)
+warning:SetHeight(14)
+warning:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -40)
+warning:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -40)
+warning.text = S.Text(warning, "GameFontNormalSmall", 0, 0, WIDTH - 24)
+warning.text:SetTextColor(C.red[1], C.red[2], C.red[3])
+warning.text:SetWordWrap(false)
+warning:SetScript("OnClick", function()
+    GP.settings.views = GP.settings.views or {}
+    GP.settings.views.route = "log"
+    GP.Open("route")
+end)
+warning:Hide()
+
+-- Right-click menu of a step: share, skip, earlier, later.
+local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+S.Round(menu)
+menu:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1)
+menu:SetFrameStrata("DIALOG")
+menu:SetSize(150, 4 * 26 + 10)
+menu:Hide()
+menu.buttons = {}
+local function menuButton(i, label, fn)
+    local b = menu.buttons[i]
+    if not b then
+        b = S.Button(menu, 138, 22, "", nil)
+        b:SetPoint("TOPLEFT", menu, "TOPLEFT", 6, -6 - (i - 1) * 26)
+        menu.buttons[i] = b
+    end
+    b:SetText(label)
+    b:SetScript("OnClick", function() menu:Hide(); fn() end)
+    b:Show()
+end
+local function openMenu(owner, t)
+    local QR, id, title = GP.QuestRoute, t.quest.id, t.quest.title
+    local n = 0
+    local function add(label, fn) n = n + 1; menuButton(n, label, fn) end
+    if GP.QuestInfo.LogIndex(id) then add(L("Share with group"), function() GP.QuestInfo.Share(id, title) end) end
+    add(L("Skip"), function() QR.Skip(id, true) end)
+    add(L("Earlier"), function() QR.Move(id, -1) end)
+    add(L("Later"), function() QR.Move(id, 1) end)
+    for i = n + 1, #menu.buttons do menu.buttons[i]:Hide() end
+    menu:SetHeight(n * 26 + 10)
+    menu:ClearAllPoints()
+    menu:SetPoint("TOPLEFT", owner, "TOPRIGHT", 4, 0)
+    menu:Show()
+end
+menu:SetScript("OnUpdate", function(self)
+    -- Closes when the mouse leaves it for a moment (no global click catcher needed).
+    if self:IsMouseOver(8, -8, -8, 8) or (self.owner and self.owner:IsMouseOver()) then self.away = 0; return end
+    self.away = (self.away or 0) + 1
+    if self.away > 90 then self:Hide() end
+end)
+
 local rows = {}
 local function row(i)
     if rows[i] then return rows[i] end
@@ -83,13 +138,16 @@ local function row(i)
     r.sub:SetWordWrap(true)
     r:SetScript("OnEnter", function(self)
         if self.task then
-            GP.QuestInfo.Show(self, self.task.quest.id, self.task.quest.title, { hint = L("Click: waypoint") })
+            GP.QuestInfo.Show(self, self.task.quest.id, self.task.quest.title,
+                { hint = L("Click: waypoint"), right = L("Right-click: share, skip, order") })
         end
     end)
     r:SetScript("OnLeave", function(self) GP.QuestInfo.Hide(self) end)
     r:SetScript("OnClick", function(self, button)
         local t = self.task
-        if not t or GP.QuestInfo.Click(t.quest.id, t.quest.title, button) or button == "RightButton" then return end
+        if not t then return end
+        if button == "RightButton" then menu.owner = self; openMenu(self, t); return end
+        if GP.QuestInfo.Click(t.quest.id, t.quest.title, button) then return end
         local QR = GP.QuestRoute
         local uiMap, x, y = QR.MapPoint(t)
         if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, QR.Title(t.quest), QR.TaskText(t)) end
@@ -116,6 +174,7 @@ function T.Refresh()
     go:SetText(QR.following and L("Stop") or L("Go"))
     if QR.following then go:SetBackdropColor(.114, .133, .165, 1) else S.Primary(go) end
     local plan = QR.Current()
+    title:SetText(plan and plan.mine and L("My route") or L("Quest route"))
     local open = {}
     for i, t in ipairs(plan and plan.tasks or {}) do
         if not QR.TaskDone(t) then open[#open + 1] = { t = t, index = i } end
@@ -133,6 +192,12 @@ function T.Refresh()
     summary:SetText(table.concat(parts, " · "))
     local here = QR.Position()
     local y = 42
+    local full, count, max = GP.QuestLog.Full()
+    warning:SetShown(full)
+    if full then
+        warning.text:SetText((L("Quest log full (%d/%d)."):format(count, max)) .. " " .. L("Click: suggestions"))
+        y = y + 16
+    end
     local count = s.collapsed and math.min(1, #open) or math.min(MAXROWS, #open)
     for i = 1, count do
         local t, index = open[i].t, open[i].index
@@ -167,7 +232,7 @@ function T.Refresh()
     if #open == 0 then
         summary:SetText(plan and L("Quest route: nothing left here. Open the route for the next zone.") or L("Quest route"))
         summary:SetWordWrap(true)
-        y = 44 + (summary:GetStringHeight() or 12)
+        y = y + 2 + (summary:GetStringHeight() or 12)
     else
         summary:SetWordWrap(false)
     end
