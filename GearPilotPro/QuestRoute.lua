@@ -530,6 +530,10 @@ end
 QR.Store = store
 local function changed()
     QR.Invalidate()
+    if QR.following then
+        local nextTask = QR.NextTask()
+        if nextTask and QR.TaskKey(nextTask) ~= QR.currentKey then QR.Follow(true) end
+    end
     if GP.ScheduleRefresh then GP.ScheduleRefresh() end
     if GP.Tracker then GP.Tracker.Refresh() end
 end
@@ -814,6 +818,11 @@ events:SetScript("OnUpdate", function(_, delta)
             t.reached = true
             QR.reached[QR.TaskKey(t)] = true
             QR.Follow(true)
+            return
         end
     end
+    -- 1.6.0: the next step changed without a quest event (your own order, skip, my route, a route setting):
+    -- the waypoint follows at once instead of pointing to the old step.
+    local nextTask = QR.NextTask()
+    if nextTask and QR.TaskKey(nextTask) ~= QR.currentKey then QR.Follow(true) end
 end)
