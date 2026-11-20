@@ -47,8 +47,10 @@ header:SetScript("OnDragStart", function() frame:StartMoving() end)
 header:SetScript("OnDragStop", function() frame:StopMovingOrSizing(); save() end)
 local title = S.Text(header, "GameFontNormal", 14, 13, W - 200)
 title:SetWordWrap(false)
-local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+-- 1.3.4: the buttons of the top row are children of the drag strip, otherwise the strip lies over them and
+-- takes their clicks (world map, zoom and whole map did nothing). Close button in the same style as CraftPilot.
+local close = S.Button(header, 26, 24, "x", function() frame:Hide() end)
+close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
 local grip = CreateFrame("Button", nil, frame)
 grip:SetSize(18, 18)
 grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
@@ -307,9 +309,9 @@ view:SetScript("OnUpdate", function(self, delta)
     end
 end)
 
-zoomIn = S.Button(frame, 28, 24, "+", function() Map.Zoom(1.25) end)
-zoomOut = S.Button(frame, 28, 24, "-", function() Map.Zoom(0.8) end)
-worldButton = S.Button(frame, 130, 24, L("World map"), function()
+zoomIn = S.Button(header, 28, 24, "+", function() Map.Zoom(1.25) end)
+zoomOut = S.Button(header, 28, 24, "-", function() Map.Zoom(0.8) end)
+worldButton = S.Button(header, 130, 24, L("World map"), function()
     if not state.map then return end
     if WorldMapFrame and WorldMapFrame.SetMapID then
         if not WorldMapFrame:IsShown() and ToggleWorldMap then ToggleWorldMap() end
@@ -318,11 +320,11 @@ worldButton = S.Button(frame, 130, 24, L("World map"), function()
         OpenWorldMap(state.map)
     end
 end)
-worldButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -36, -10)
+worldButton:SetPoint("RIGHT", close, "LEFT", -8, 0)
 zoomIn:SetPoint("RIGHT", worldButton, "LEFT", -8, 0)
 zoomOut:SetPoint("RIGHT", zoomIn, "LEFT", -4, 0)
 -- Whole map or only what you have explored (for players who want to discover it themselves).
-local revealButton = S.Button(frame, 130, 24, "", function(self)
+local revealButton = S.Button(header, 130, 24, "", function(self)
     if not GP.settings then return end
     GP.settings.mapReveal = GP.settings.mapReveal == false
     Map.Layout()
