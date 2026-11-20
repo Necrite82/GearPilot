@@ -411,7 +411,7 @@ local de = {
     ["Memory check: GearPilot from %.1f to %.1f MB in %d seconds (WoW cleans up in between). Biggest causes (sub-calls included):"] =
         "Speichermessung: GearPilot von %.1f auf %.1f MB in %d Sekunden (WoW räumt zwischendurch auf). Größte Verursacher (inkl. Unteraufrufe):",
     ["Memory check over %d seconds. Biggest causes (sub-calls included):"] = "Speichermessung über %d Sekunden. Größte Verursacher (inkl. Unteraufrufe):",
-    ["calls"] = "Aufrufe", ["Redraws started by: "] = "Neuzeichnen ausgelöst von: ", ["Events: "] = "Ereignisse: ",
+    ["calls"] = "Aufrufe", ["Items read for the first time (tooltip): %d"] = "Gegenstände zum ersten Mal gelesen (Tooltip): %d", ["Redraws started by: "] = "Neuzeichnen ausgelöst von: ", ["Events: "] = "Ereignisse: ",
     -- 1.6.1 raids and access
     ["Raids"] = "Raids", ["WoW Forever"] = "WoW Forever", ["All raids"] = "Alle Raids",
     ["Raids, their loot for you and the quests to get in"] = "Raids, ihre Beute für dich und die Quests für den Zugang",

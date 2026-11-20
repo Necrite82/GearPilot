@@ -71,6 +71,7 @@ function D.StartMemoryWatch(seconds)
     for _, event in ipairs(EVENTS) do pcall(listener.RegisterEvent, listener, event) end
     listener:SetScript("OnEvent", function(_, event) counts[event] = (counts[event] or 0) + 1 end)
     local start = own()
+    local missesBefore = GP.Stats.misses or 0
     D.watch = true
     say((L("Memory check runs for %d seconds – just keep playing."):format(seconds)))
     local function finish()
@@ -96,6 +97,8 @@ function D.StartMemoryWatch(seconds)
             for i = 1, math.min(6, #list) do parts[#parts + 1] = list[i][1] .. " " .. list[i][2] .. "×" end
             if #parts > 0 then say(label .. table.concat(parts, ", ")) end
         end
+        local misses = (GP.Stats.misses or 0) - missesBefore
+        if misses > 0 then say((L("Items read for the first time (tooltip): %d"):format(misses))) end
         top(callers, L("Redraws started by: "))
         top(counts, L("Events: "))
     end
