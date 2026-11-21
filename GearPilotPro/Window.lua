@@ -3005,10 +3005,10 @@ function GP.Render()
 end
 
 local scheduled = false
-function GP.ScheduleRefresh()
+function GP.ScheduleRefresh(delay)
     if scheduled or not frame:IsShown() then return end
     scheduled = true
-    C_Timer.After(0.2, function()
+    C_Timer.After(delay or 0.2, function()
         scheduled = false
         GP.Render()
     end)
@@ -3027,8 +3027,7 @@ function GP.Toggle()
     if frame:IsShown() then frame:Hide() else GP.Open() end
 end
 
--- 1.6.2: after two minutes with the window closed, the big lists are let go (item rows, dungeon catalog, BIS,
--- stat cache): a few MB less while you play. Opening the window builds them again (a fraction of a second).
+-- 1.6.2: after two minutes with the window closed, the big lists are let go (item rows, dungeon catalog, BIS): a few MB less while you play. Opening the window builds them again (a fraction of a second).
 local closedAt = 0
 function GP.ReleaseCaches()
     GP.Sources.rows, GP.Sources.signature = nil, nil
@@ -3036,7 +3035,7 @@ function GP.ReleaseCaches()
     GP.craftedRows, GP.equipIndex = nil, nil
     bisCache = {}
     U.listState = nil
-    GP.Stats.ClearCache()
+    -- The stat cache stays: building it again means reading thousands of item tooltips (1.7.1).
     -- The route keeps its own rewards built from those rows: let them go too (built again on its next update).
     GP.QuestRoute.own = nil
     GP.QuestRoute.Invalidate()

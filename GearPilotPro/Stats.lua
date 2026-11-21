@@ -178,6 +178,7 @@ function Stats.Read(link, item)
     local raw = C_Item.GetItemStats and C_Item.GetItemStats(link)
     if not raw then return nil end
     local values = Stats.Combine(raw, tooltipLines(link), item)
+    Stats.misses = (Stats.misses or 0) + 1
     cache[link] = values
     return values
 end

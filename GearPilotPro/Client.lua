@@ -383,6 +383,9 @@ events:SetScript("OnEvent", function(_, event, arg, success)
         if not pending[arg] then return end
         pending[arg] = nil
         if not success then missing[arg] = true end
+        -- Items arrive in bursts of hundreds: one redraw a second instead of one every few items (1.7.1).
+        if GP.ScheduleRefresh then GP.ScheduleRefresh(1) end
+        return
     end
     if GP.ScheduleRefresh then GP.ScheduleRefresh() end
 end)
