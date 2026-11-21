@@ -1215,14 +1215,15 @@ local function questBlock(row)
     if row.choiceGroup then
         detailLine("GameFontDisableSmall", L("Choice reward: you get one item of this quest. GearPilot shows the best one for you."), C.muted)
     end
-    local chain = GP.Route.Chain(row.sourceID)
-    local map = { L("Map"), function() GP.Map.Chain(row.sourceID) end, 90 }
+    local status, step, chain = GP.Route.QuestAccess(row.sourceID)
+    detailLine("GameFontHighlightSmall", status)
+    local buttons = {}
+    if step then buttons[#buttons + 1] = { L("Next step"), function() GP.Route.ToGiver(step.id) end, 115 } end
     if #chain > 1 then
-        actions({ L("Waypoint to quest giver"), function() GP.Route.ToGiver(row.sourceID) end },
-            { (L("Whole chain (%d)")):format(#chain), function() GP.Route.ToChain(row.sourceID) end }, map)
-    else
-        actions({ L("Waypoint to quest giver"), function() GP.Route.ToGiver(row.sourceID) end }, map)
+        buttons[#buttons + 1] = { (L("Whole chain (%d)")):format(#chain), function() GP.Route.ToChain(row.sourceID) end, 130 }
     end
+    buttons[#buttons + 1] = { L("Map"), function() GP.Map.Chain(row.sourceID) end, 90 }
+    actions(unpack(buttons))
     if #chain > 1 then chainSteps(chain, row.sourceID) end
 end
 
@@ -1408,12 +1409,12 @@ local function showSources(id, item)
     local db = ForeverDB
     for _, src in ipairs(sources) do
         if src.kind == "quest" then
-            local chain = GP.Route.Chain(src.questID)
+            local status, step, chain = GP.Route.QuestAccess(src.questID)
             local title = GP.Sources.QuestTitle(src.questID, src.name)
             sourceLine2("quest", title, L("Quest") .. " · " .. (L("Level %d")):format(src.level or 0)
-                .. (src.giver and (" · " .. src.giver) or "") .. (src.zone and (", " .. src.zone) or ""),
-                #chain > 1 and (L("Chain (%d)")):format(#chain) or L("Waypoint"),
-                function() if #chain > 1 then GP.Route.ToChain(src.questID) else GP.Route.ToGiver(src.questID) end end,
+                .. (src.giver and (" · " .. src.giver) or "") .. (src.zone and (", " .. src.zone) or "") .. " · " .. status,
+                step and L("Next step") or nil,
+                step and function() GP.Route.ToGiver(step.id) end or nil,
                 function() if #chain > 1 then GP.Map.Chain(src.questID) else GP.Map.Quests(title, { src.questID }) end end,
                 nil, src.questID, src.name)
         elseif src.kind == "dungeon" then
@@ -1836,7 +1837,7 @@ local function showRouteTask(data, profile, equipped)
     if t.buy then
         detailLine("GameFontDisableSmall", L("This item is sold by a vendor; the route moves on once you have enough of it."), C.muted)
     elseif t.kind == "objective" then
-        detailLine("GameFontDisableSmall", L("The route moves on when the quest is complete or when you reach this place."), C.muted)
+        detailLine("GameFontDisableSmall", L("The route moves on when the quest log confirms progress."), C.muted)
     end
     actions({ L("Waypoint"), function()
         if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, title, QR.TaskText(t)) end
@@ -2355,7 +2356,7 @@ local function routeData(player)
     end
     for _, entry in ipairs(QR.OpenTasks(plan)) do
         local i, t = entry.index, entry.t
-        list[#list + 1] = { key = ("route:%d:%s:%d"):format(i, t.kind, t.quest.id), task = t, index = i }
+        list[#list + 1] = { key = "route:" .. QR.TaskKey(t), task = t, index = i }
     end
     -- Summary: zone, quests, experience and how far it gets you.
     local parts = {}
@@ -2857,7 +2858,13 @@ function fillRow(r, kind, data, width, list)
     else
         r.icon:SetTexture(item.icon)
         r.name:SetText(S.QualityColor(item.quality) .. item.name .. "|r")
-        r.sub:SetText(slotText(item, data.slot) .. " · " .. sourceLine(data.entry))
+        local sub = slotText(item, data.slot) .. " · " .. sourceLine(data.entry)
+        local replaced = data.current and data.current.name
+        if data.second and data.second.name then
+            replaced = replaced and (replaced .. " + " .. data.second.name) or data.second.name
+        end
+        if replaced then sub = (L("Replaces %s"):format(replaced)) .. " · " .. sub end
+        r.sub:SetText(sub)
         r.value:SetText(signed(data.gain))
         color(r.value, C.green)
     end
@@ -2938,21 +2945,29 @@ function GP.Render()
     local width = listW - 32
     U.listContent:SetWidth(width)
     local selected = GP.selected[selectKey]
-    local found
-    for _, data in ipairs(list) do
-        if (data.key or data.entry.key) == selected then found = data end
+    local old = U.listState
+    local offset = old and old.context == selectKey and (U.listScroll:GetVerticalScroll() or 0) or 0
+    local anchor = old and old.context == selectKey and old.list[math.floor(offset / 46) + 1]
+    local anchorKey = anchor and (anchor.key or anchor.entry.key)
+    local found, nextOffset
+    for i, data in ipairs(list) do
+        local key = data.key or data.entry.key
+        if key == selected then found = data end
+        if key == anchorKey then nextOffset = (i - 1) * 46 + offset % 46 end
     end
     if not found then
         found = list[1]
-        GP.selected[selectKey] = found and (found.key or found.entry.key) or nil
+        if not loading or not selected then
+            GP.selected[selectKey] = found and (found.key or found.entry.key) or nil
+        end
     end
     -- 1.6.2: only the visible rows exist (plus one); scrolling fills them with the entries now in view. Long lists
     -- used to build one row per entry (hundreds of frames).
-    U.listState = { list = list, kind = kind, found = found, width = width }
+    U.listState = { list = list, kind = kind, found = found, width = width, context = selectKey }
     U.listContent:SetHeight(math.max(10, #list * 46))
-    if (U.listScroll:GetVerticalScroll() or 0) > math.max(0, #list * 46 - (U.listScroll:GetHeight() or 0)) then
-        U.listScroll:SetVerticalScroll(0)
-    end
+    local maxScroll = math.max(0, #list * 46 - (U.listScroll:GetHeight() or 0))
+    local desired = math.min(nextOffset or offset, maxScroll)
+    if U.listScroll:GetVerticalScroll() ~= desired then U.listScroll:SetVerticalScroll(desired) end
     drawRows()
     U.empty:SetWidth(listW - 28)
     if #list == 0 then

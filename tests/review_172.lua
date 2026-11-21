@@ -96,6 +96,41 @@ assert(switched ~= unchanged and switched.quests[1].gain == 20,"Switching profil
 profile.SP = 2
 assert(QR.Current().quests[1].gain == 40,"Editing weights in the same profile table also refreshes the route")
 
+-- A map arrival keeps the objective open; a confirmed quest-log update advances it.
+local other = { kind = "accept", quest = { id = 2 } }
+local objective = { kind = "objective", quest = { id = 1 }, ref = "o50" }
+local completed = false
+C_QuestLog.IsOnQuest = function(id) return id == 1 end
+QR.ObjectiveState = function() return completed and true or nil end
+QR.Current = function() return { tasks = { other, objective } } end
+QR.following, QR.currentKey = true, QR.TaskKey(objective)
+QR.reached[QR.currentKey] = true
+assert(not QR.TaskDone(objective) and QR.TaskText(objective):find("Location reached",1,true))
+assert(QR.NextTask()==objective and QR.OpenTasks(QR.Current())[1].t==objective,
+    "Reordered routes keep their currently tracked, open task")
+completed=true
+assert(QR.TaskDone(objective) and QR.NextTask()==other,"Confirmed objective advances the route")
+
+assert(loadfile("GearPilotPro/Route.lua"))("GearPilotPro",H)
+local accessChain = {
+    {id=1,title="First",minLevel=10,pre={}},
+    {id=2,title="Reward quest",minLevel=20,pre={1},giver="Quest giver"},
+}
+H.Route.Chain = function() return accessChain end
+C_QuestLog.IsQuestFlaggedCompleted = function() return false end
+ForeverDB.qx[2] = {}
+local status,step=H.Route.QuestAccess(2)
+assert(status=="Prerequisite open · First" and step.id==1)
+accessChain[1].active=true
+status,step=H.Route.QuestAccess(2)
+assert(status=="Prerequisite in quest log · First" and not step)
+accessChain[1].active=false; accessChain[1].done=true
+status,step=H.Route.QuestAccess(2)
+assert(status=="Available by known requirements" and step.id==2)
+accessChain[2].done=true
+status,step=H.Route.QuestAccess(2)
+assert(status=="Quest completed" and not step)
+
 CreateFrame, C_Item, C_TooltipInfo, SlashCmdList, C_Timer, C_QuestLog, ForeverDB, GearPilotProCache,
     GetQuestLogRewardXP, GetQuestLogRewardMoney = saved.frame, saved.items, saved.tips, saved.commands,
     saved.timer, saved.quests, saved.db, saved.cache, saved.xp, saved.money

@@ -149,6 +149,10 @@ local function row(i)
         if button == "RightButton" then menu.owner = self; openMenu(self, t); return end
         if GP.QuestInfo.Click(t.quest.id, t.quest.title, button) then return end
         local QR = GP.QuestRoute
+        if QR.following and (t.kind == "accept" or t.quest.active) and not QR.Blocked(t) then
+            QR.Follow(true, false, QR.TaskKey(t))
+            return
+        end
         local uiMap, x, y = QR.MapPoint(t)
         if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, QR.Title(t.quest), QR.TaskText(t)) end
     end)
