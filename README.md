@@ -1,6 +1,6 @@
 # GearPilot
 
-GearPilot finds equipment upgrades for **World of Warcraft: Forever**: items in your bags, quest rewards and dungeon drops in your level range, best first. The window uses the same layout as CraftPilot: navigation on the left, list and details on the right. English and German.
+GearPilot finds equipment upgrades for **World of Warcraft: Forever**: items in your bags, quest rewards and dungeon drops in your level range. The main upgrade list shows what you already carry first and ranks each source group by score. The window uses the same layout as CraftPilot: navigation on the left, list and details on the right. English and German.
 
 ## Install (development build)
 
@@ -26,7 +26,7 @@ The internal name is `GearPilotPro` (folder, saved settings, window names) so it
 
 ## Quest route
 
-The page "Quest route" plans the quests worth most at your level: every quest you can take now (level, pre-quests, faction, race, class; not grey, not done) and those in your log, valued by their experience plus the upgrade value of their best reward (focus: experience, balanced or gear). It picks the zone whose quests are worth most for the way there (with the nearest flight point of your faction when it is far) and orders the tasks nearest first: accept, objectives (creatures, objects and the creatures that drop quest items, where ForeverDB knows them), turn in; quests with unknown objectives are turned in last. "Go" sets the waypoint to the next task and keeps the current step while it still applies, and moves on when your quest log confirms progress. Arrival at an objective's location is displayed separately; "Map" shows the whole route. The plan is worked out again after a level up, quest changes and zone changes (`GearPilotPro/QuestRoute.lua`, world coordinates from ForeverDB's spawns).
+The page "Quest route" plans the quests worth most at your level: every quest you can take now (level, pre-quests, faction, race, class; not grey, not done) and those in your log, valued by their experience plus the upgrade value of their best reward (focus: experience, balanced or gear). It recommends the zone whose quests are worth most for the way there (with the nearest flight point of your faction when it is far). Use **Choose zone** to pick a different area. Your choice stays active until you change it or select **Use recommendation**. The planner then builds its route for that area and orders the tasks nearest first: accept, objectives (creatures, objects and the creatures that drop quest items, where ForeverDB knows them), turn in; quests with unknown objectives are turned in last. "Go" sets the waypoint to the next task and keeps the current step while it still applies, and moves on when your quest log confirms progress. Arrival at an objective's location is displayed separately; "Map" shows the whole route. The plan is worked out again after a level up, quest changes and zone changes (`GearPilotPro/QuestRoute.lua`, world coordinates from ForeverDB's spawns).
 
 ## Quest experience
 

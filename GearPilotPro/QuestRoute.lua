@@ -379,6 +379,7 @@ function QR.Plan(db, ctx)
     for _, q in ipairs(candidates) do
         if not q.skipped and not (ctx.hideEscort and q.escort and not q.active) then usable[#usable + 1] = q end
     end
+    local zones = QR.Zones(usable, ctx.position)
     if ctx.mine then
         -- My route: only the quests you picked (and the follow-ups of picked quests you have done).
         local byID = {}
@@ -395,14 +396,23 @@ function QR.Plan(db, ctx)
             if ctx.mine[q.id] then quests[#quests + 1] = q; xp = xp + q.xp end
         end
         table.sort(quests, function(a, b) return a.value > b.value end)
-        return { mine = true, zones = {}, quests = quests, xp = xp, candidates = candidates,
+        return { mine = true, zones = zones, recommended = zones[1], quests = quests, xp = xp, candidates = candidates,
             tasks = QR.Order(quests, ctx.position, ctx.complete, ctx.rank) }
     end
-    local zones = QR.Zones(usable, ctx.position)
     local zone = zones[1]
+    if ctx.zone then
+        zone = nil
+        for _, option in ipairs(zones) do
+            if option.zone == ctx.zone then zone = option; break end
+        end
+        if not zone then
+            local name = db.area and db.area[ctx.zone] and db.area[ctx.zone][1]
+            zone = { zone = ctx.zone, name = QR.AreaName(ctx.zone, name), quests = {} }
+        end
+    end
     local focused
     if ctx.focusedQuest then
-        for _, candidateZone in ipairs(zones) do
+        for _, candidateZone in ipairs(ctx.zone and { zone } or zones) do
             for _, quest in ipairs(candidateZone.quests) do
                 if quest.id == ctx.focusedQuest then zone, focused = candidateZone, quest; break end
             end
@@ -419,7 +429,12 @@ function QR.Plan(db, ctx)
     end
     local xp = 0
     for _, q in ipairs(quests) do xp = xp + q.xp end
-    return { zone = zone, zones = zones, quests = quests, xp = xp, next = zone == zones[1] and zones[2] or zones[1], candidates = candidates,
+    local nextZone
+    if not ctx.zone then
+        if zone == zones[1] then nextZone = zones[2] else nextZone = zones[1] end
+    end
+    return { zone = zone, zones = zones, chosenZone = ctx.zone, recommended = zones[1], quests = quests, xp = xp,
+        next = nextZone, candidates = candidates,
         tasks = QR.Order(quests, ctx.position, ctx.complete, ctx.rank) }
 end
 
@@ -495,7 +510,7 @@ function QR.Current()
     end
     -- A changed route setting (focus, dungeon or escort quests, automatic or your own) means a new plan.
     local key = table.concat({ tostring(s.routeFocus), tostring(s.routeDungeon), tostring(s.routeEscort), tostring(s.routeMode),
-        tostring(s.routeDetour) }, ":")
+        tostring(s.routeDetour), tostring(s.routeZone) }, ":")
     if QR.plan and QR.planKey == key then return QR.plan end
     QR.planKey = key
     local player = GP.Player()
@@ -517,6 +532,7 @@ function QR.Current()
         skip = function(id) return s.routeSkip and s.routeSkip[id] == true end,
         hideEscort = s.routeEscort ~= true,
         mine = s.routeMode == "mine" and s.routeMine or nil,
+        zone = s.routeZone,
         rank = QR.Rank(),
         focusedQuest = QR.following and QR.currentKey and QR.current and not QR.TaskDone(QR.current) and QR.current.quest.id,
         xp = function(id, level)
@@ -616,8 +632,44 @@ function QR.SetMine(id, on)
     changed()
 end
 function QR.SetMode(mode)
-    store().routeMode = mode
+    local s = store()
+    s.routeMode = mode
+    s.routeZone = nil
     changed()
+end
+
+function QR.SetZone(areaID)
+    local s = store()
+    s.routeMode = "auto"
+    s.routeZone = areaID
+    changed()
+end
+
+-- Include known quest areas even when there is nothing suitable at the current level.
+function QR.ZoneChoices(db, plan)
+    local choices, byID = {}, {}
+    for _, zone in ipairs(plan.zones) do
+        if type(zone.zone) == "number" and zone.zone > 0 then
+            local choice = { id = zone.zone, name = zone.name, count = #zone.quests, xp = zone.xp }
+            choices[#choices + 1] = choice
+            byID[choice.id] = true
+        end
+    end
+    for _, detail in pairs(db.qx or {}) do
+        local id = detail[11]
+        local area = id and db.area and db.area[id]
+        if type(id) == "number" and id > 0 and area and not byID[id] and not (db.dng and db.dng[id]) then
+            byID[id] = true
+            choices[#choices + 1] = { id = id, name = QR.AreaName(id, area[1]), count = 0, xp = 0 }
+        end
+    end
+    table.sort(choices, function(a, b)
+        if (a.count > 0) ~= (b.count > 0) then return a.count > 0 end
+        local an, bn = a.name or "", b.name or ""
+        if an ~= bn then return an < bn end
+        return a.id < b.id
+    end)
+    return choices
 end
 
 -- A task is done when its quest moved past it.
@@ -631,7 +683,7 @@ function QR.ObjectiveState(t)
     names[#names + 1] = t.label
     for _, o in ipairs(GP.QuestInfo.Objectives(t.quest.id)) do
         for _, name in ipairs(names) do
-            if type(name) == "string" and name ~= "" and o.text:find(name, 1, true) then return o.finished == true end
+            if type(name) == "string" and name ~= "" and o.text:find(name, 1, true) then return o.finished == true, o end
         end
     end
     return nil
@@ -724,6 +776,24 @@ function QR.TaskText(t)
 end
 
 -- Bought quest items: how many you have and how many the quest wants (known once the quest is in your log).
+function QR.TrackerAction(t)
+    if t.kind == "accept" or t.kind == "turnin" then
+        local ref = t.kind == "accept" and t.quest.giverRef or t.quest.enderRef or t.quest.giverRef
+        local npc = ForeverDB and ref and GP.Sources.GiverName(ForeverDB, ref)
+        if npc then
+            return (L(t.kind == "accept" and "Accept from %s" or "Turn in to %s")):format(npc)
+        end
+    elseif not t.buy then
+        local _, objective = QR.ObjectiveState(t)
+        if objective and type(objective.numRequired) == "number" and objective.numRequired > 0
+            and type(objective.numFulfilled) == "number" then
+            return (L("%d of %d left · %s")):format(math.max(0, objective.numRequired - objective.numFulfilled),
+                objective.numRequired, QR.TaskText(t))
+        end
+    end
+    return QR.TaskText(t)
+end
+
 function QR.BuyProgress(t)
     local have = GetItemCount and t.item and (GetItemCount(t.item) or 0) or 0
     local need
@@ -807,10 +877,10 @@ function QR.Follow(on, force, preferredKey)
     end
     local t, i = QR.NextTask(preferredKey)
     if not t then
-        say(L("Quest route: nothing left here. Open the route for the next zone."))
-        QR.ClearTomTom()
-        QR.following, QR.current, QR.currentKey = false, nil, nil
-        if GP.Tracker then GP.Tracker.Refresh() end
+        local plan = QR.Current()
+        say(plan and plan.chosenZone and L("No matching open quests in your chosen zone. Choose another zone or use the recommendation.")
+            or L("Quest route: nothing left here. Open the route for the next zone."))
+        QR.Follow(false)
         return
     end
     -- 1.4.0: only a new step sets the waypoint and writes to the chat (the plan is rebuilt on every quest log

@@ -129,11 +129,8 @@ local function row(i)
     r.icon = r:CreateTexture(nil, "ARTWORK")
     r.icon:SetSize(16, 16)
     r.icon:SetPoint("TOPLEFT", r, "TOPLEFT", 7, -5)
-    r.name = S.Text(r, "GameFontHighlightSmall", 28, 5, WIDTH - 100)
-    r.name:SetWordWrap(false)
-    r.value = S.Text(r, "GameFontNormalSmall", 0, 5, 64, "", "RIGHT")
-    r.value:ClearAllPoints()
-    r.value:SetPoint("TOPRIGHT", r, "TOPRIGHT", -8, -5)
+    r.name = S.Text(r, "GameFontHighlightSmall", 28, 5, WIDTH - 52)
+    r.name:SetWordWrap(true)
     r.sub = S.Text(r, "GameFontDisableSmall", 28, 19, WIDTH - 52)
     r.sub:SetWordWrap(true)
     r:SetScript("OnEnter", function(self)
@@ -187,6 +184,7 @@ function T.Refresh()
         if not quests[q.id] then quests[q.id] = true; quests[#quests + 1] = q.id; xp = xp + (q.xp or 0) end
     end
     local parts = {}
+    summary:SetWordWrap(false)
     if plan and plan.zone and plan.zone.name then parts[#parts + 1] = plan.zone.name end
     parts[#parts + 1] = (L("%d quests"):format(#quests))
     if xp > 0 then parts[#parts + 1] = GP.QuestXP.Text(xp) end
@@ -201,7 +199,7 @@ function T.Refresh()
     end
     local count = s.collapsed and math.min(1, #open) or math.min(MAXROWS, #open)
     for i = 1, count do
-        local t, index = open[i].t, open[i].index
+        local t = open[i].t
         local r = row(i)
         r.task = t
         local current = i == 1
@@ -210,11 +208,15 @@ function T.Refresh()
         if current then r:SetBackdropColor(C.raised[1], C.raised[2], C.raised[3], 1) else r:SetBackdropColor(0, 0, 0, 0) end
         r.stripe:SetShown(current)
         r.icon:SetTexture(t.buy and "Interface\\GossipFrame\\VendorGossipIcon" or ICONS[t.kind])
-        r.name:SetText(("%d. %s"):format(index, QR.Title(t.quest)))
+        r.name:SetText(QR.TrackerAction(t))
         local c = current and C.text or C.muted
         r.name:SetTextColor(c[1], c[2], c[3])
-        r.value:SetText((t.kind == "turnin" and (t.quest.xp or 0) > 0) and GP.QuestXP.Text(t.quest.xp) or "")
-        local sub = { QR.TaskText(t) }
+        local nameHeight = math.max(14, r.name:GetStringHeight() or 14)
+        r.sub:ClearAllPoints()
+        r.sub:SetPoint("TOPLEFT", r, "TOPLEFT", 28, -(5 + nameHeight))
+        local sub = { QR.Title(t.quest) }
+        if t.kind == "turnin" and (t.quest.xp or 0) > 0 then sub[#sub + 1] = GP.QuestXP.Text(t.quest.xp) end
+        if t.quest.zoneName then sub[#sub + 1] = t.quest.zoneName end
         if t.p and here then
             local d = QR.Distance(here, t.p)
             if d < 5000 then sub[#sub + 1] = (L("%d m"):format(math.floor(d))) end
@@ -224,14 +226,15 @@ function T.Refresh()
         local lines = (current and t.kind ~= "accept") and objectiveLines(t.quest.id) or {}
         if #lines > 0 then text = text .. "\n" .. table.concat(lines, "\n") end
         r.sub:SetText(text)
-        local height = math.max(ROW, 24 + (r.sub:GetStringHeight() or 12))
+        local height = math.max(ROW, 10 + nameHeight + (r.sub:GetStringHeight() or 12))
         r:SetHeight(height)
         r:Show()
         y = y + height + 2
     end
     for i = count + 1, #rows do rows[i]:Hide() end
     if #open == 0 then
-        summary:SetText(plan and L("Quest route: nothing left here. Open the route for the next zone.") or L("Quest route"))
+        summary:SetText(plan and plan.chosenZone and L("No matching open quests in your chosen zone. Choose another zone or use the recommendation.")
+            or plan and L("Quest route: nothing left here. Open the route for the next zone.") or L("Quest route"))
         summary:SetWordWrap(true)
         y = y + 2 + (summary:GetStringHeight() or 12)
     else

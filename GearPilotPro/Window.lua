@@ -313,10 +313,15 @@ local function setting(path)
         local a, b = path:match("([^.]+)%.(.+)")
         return s[a] and s[a][b]
     end
+    if path == "routeMode" and s.routeZone then return "zone" end
     return s[path]
 end
 local function setSetting(path, value)
     local s = GP.settings
+    if path == "routeMode" then
+        GP.QuestRoute.SetMode(value)
+        return
+    end
     if path:find("%.") then
         local a, b = path:match("([^.]+)%.(.+)")
         s[a] = s[a] or {}
@@ -424,6 +429,11 @@ segmentPill({ "route" }, "View", 96, { { "route", "Route" }, { "pick", "Choose q
     { "log", "Quest log" }, { "later", "Remembered" }, { "skipped", "Skipped" } }, "views.route", "route")
 local routeMode = segmentPill({ "route" }, "Route from", 110, { { "auto", "Automatic" }, { "mine", "My quests" } }, "routeMode", "auto")
 routeMode.when = function() local v = routeView(); return v == "route" or v == "pick" end
+local routeZone = actionPill({ "route" }, "Destination", 130, { { "Choose zone", function()
+    GP.settings.views.route = "zones"
+    GP.Render()
+end } })
+routeZone.when = function() return routeView() == "route" end
 local routeFocus = segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
 routeFocus.when = function() return routeView() == "route" and GP.settings.routeMode ~= "mine" end
 local routeDungeon = segmentPill({ "route" }, "Dungeon quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeDungeon", false)
@@ -610,6 +620,7 @@ local function drawRows()
         used = used + 1
         local r, data = row(used), st.list[i]
         r.key = data.key or data.entry.key
+        r.selectable = not data.section
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", U.listContent, "TOPLEFT", 0, -(i - 1) * 46)
         r:SetWidth(st.width)
@@ -645,6 +656,7 @@ function row(i)
     r.value:ClearAllPoints()
     r.value:SetPoint("TOPRIGHT", r, "TOPRIGHT", -10, -14)
     r:SetScript("OnClick", function(self)
+        if not self.selectable then return end
         GP.selected[GP.settings.page .. (GP.view or "")] = self.key
         GP.Render()
     end)
@@ -1610,12 +1622,51 @@ local function showDungeon(dungeon, profile, equipped)
     GP.QuestXP.Request(ask)
     local totalXP, _, withoutXP = GP.QuestXP.Sum(openSteps)
     S.Metrics(U.detail, {
-        { label = L("Expected per run"), value = "Ø " .. signed(dungeon.expected), color = C.green, emphasis = true },
+        { label = L("Loot per run"), value = "Ø " .. signed(dungeon.dropExpected or 0), color = C.green, emphasis = true },
         { label = L("Upgrades"), value = tostring(#dungeon.results), color = C.text },
         { label = L("Open quests"), note = totalXP > 0 and GP.QuestXP.Text(totalXP) or nil,
             value = (#quests > 0) and (open .. " / " .. #quests) or "0", color = C.text },
     }, 12, detailY, width)
     detailY = detailY + 60
+    local rewards, topQuest = {}, nil
+    for _, info in ipairs(quests) do
+        if not info.done then
+            local reward = bestReward(info.id, equipped, profile, player)
+            rewards[info.id] = reward
+            if reward and (not topQuest or reward.gain > topQuest.gain) then
+                topQuest = { id = info.id, gain = reward.gain, item = reward.item }
+            end
+        end
+    end
+    if topQuest then
+        local status, nextStep = GP.Route.QuestAccess(topQuest.id)
+        section(L("Best open quest upgrade"))
+        detailLine("GameFontHighlightSmall", signed(topQuest.gain) .. " · " .. topQuest.item.name, C.green)
+        detailLine("GameFontDisableSmall", status, C.muted)
+        if nextStep then
+            actions({ L("Next step"), function() GP.Route.ToGiver(nextStep.id) end, 122 })
+        end
+    end
+    if #dungeon.results > 0 then
+        section(L("Best repeatable drops"))
+        local drops = {}
+        for i, result in ipairs(dungeon.results) do drops[i] = result end
+        local function expected(result)
+            local source = result.entry.row
+            return result.gain * (source.chance or source.estimate or P.UNKNOWN_CHANCE)
+        end
+        table.sort(drops, function(a, b)
+            local av, bv = expected(a), expected(b)
+            if av ~= bv then return av > bv end
+            return a.entry.key < b.entry.key
+        end)
+        for i = 1, math.min(2, #drops) do
+            local result = drops[i]
+            local source = result.entry.row
+            detailLine("GameFontHighlightSmall", result.item.name .. " · " .. signed(result.gain)
+                .. " · " .. (source.boss or "?") .. " · " .. chanceLabel(source), C.text)
+        end
+    end
     if totalXP > 0 then
         detailLine("GameFontHighlightSmall", (L("The open quests give %s, pre-quests included."):format(GP.QuestXP.Text(totalXP)))
             .. (withoutXP > 0 and (" " .. (L("(+%d without a value)"):format(withoutXP))) or ""), C.text)
@@ -1709,7 +1760,7 @@ local function showDungeon(dungeon, profile, equipped)
             if not info.done then
                 local value = GP.QuestXP.Get(info.id, info.level)
                 if value.xp and value.xp > 0 then parts[#parts + 1] = GP.QuestXP.Text(value.xp) end
-                local reward = bestReward(info.id, equipped, profile, player)
+                local reward = rewards[info.id]
                 if reward then parts[#parts + 1] = "|cff85d6a0" .. signed(reward.gain) .. "|r " .. (reward.item.name or "") end
             end
             local kind = info.done and "questdone" or info.active and "questactive" or "quest"
@@ -2296,7 +2347,20 @@ local function routeViewData(view)
     local plan = QR.Current()
     if not plan then return {}, false, { missing = true }, "route" end
     local list = {}
-    if view == "pick" then
+    if view == "zones" then
+        local recommended = plan.recommended
+        list[1] = { key = "routezone:auto", name = L("Use recommendation"), automatic = true,
+            sub = recommended and (recommended.name or "?") or L("No matching open quests"), count = 0 }
+        for _, zone in ipairs(QR.ZoneChoices(ForeverDB, plan)) do
+            zone.key = "routezone:" .. zone.id
+            zone.sub = (L("%d open quests")):format(zone.count)
+            if zone.xp > 0 then zone.sub = zone.sub .. " · " .. GP.QuestXP.Text(zone.xp) end
+            if zone.id == GP.settings.routeZone then zone.sub = L("Your choice") .. " · " .. zone.sub end
+            list[#list + 1] = zone
+        end
+        GP.routeSummary = L("Choose where to quest now")
+        return list, false, {}, "routezones"
+    elseif view == "pick" then
         -- Every quest you can take (or have), nearby or in all zones, best first; your picks marked.
         local here = QR.Position()
         local near = (GP.settings.routePick or "near") == "near"
@@ -2349,7 +2413,7 @@ local function routeData(player)
     if not plan then return {}, false, { missing = true }, "route" end
     local list = {}
     local zone = plan.zone
-    if zone and zone.distance > 1500 then
+    if zone and zone.distance and zone.distance < math.huge and zone.distance > 1500 then
         local _, _, node = QR.FlightPoint(ForeverDB, zone.center, player.faction)
         local flight = QR.FlightName(node)
         list[#list + 1] = { key = "route:travel", travel = true, zone = zone, flight = flight }
@@ -2361,7 +2425,10 @@ local function routeData(player)
     -- Summary: zone, quests, experience and how far it gets you.
     local parts = {}
     if plan.mine then parts[#parts + 1] = L("My route") end
-    if zone then parts[#parts + 1] = zone.name or "?" end
+    if zone then parts[#parts + 1] = (plan.chosenZone and (L("Your choice") .. " · ") or "") .. (zone.name or "?") end
+    if plan.chosenZone and plan.recommended and plan.recommended.zone ~= plan.chosenZone then
+        parts[#parts + 1] = (L("Recommended: %s")):format(plan.recommended.name or "?")
+    end
     parts[#parts + 1] = (L("%d quests"):format(#plan.quests))
     if plan.xp > 0 then
         local text = GP.QuestXP.Text(plan.xp)
@@ -2379,7 +2446,7 @@ local function routeData(player)
     end
     if plan.next then parts[#parts + 1] = L("then: ") .. (plan.next.name or "?") end
     GP.routeSummary = table.concat(parts, "  ·  ")
-    return list, false, {}, "route"
+    return list, false, { chosenZone = plan.chosenZone }, "route"
 end
 
 local function pageData(page, s, low, high, equipped, profile, player)
@@ -2414,7 +2481,16 @@ local function pageData(page, s, low, high, equipped, profile, player)
         for _, key in ipairs({ "Vendors", "Auction", "Crafted" }) do
             if s.include[key] then sources[#sources + 1] = key end
         end
-        local list, loading, states = recommend(sources, low, high, equipped, profile, player)
+        local results, loading, states = recommend(sources, low, high, equipped, profile, player)
+        local list = {}
+        local labels = { "In your bags", "Quests", "Dungeons", "Buy & craft" }
+        for i, group in ipairs(P.UpgradeGroups(results)) do
+            if #group > 0 then
+                list[#list + 1] = { key = "upgradegroup:" .. i, section = L(labels[i]) }
+                for _, result in ipairs(group) do list[#list + 1] = result end
+            end
+        end
+        list.upgradeCount = #results
         return list, loading, states, "upgrade"
     end
     if page == "quests" then
@@ -2660,12 +2736,15 @@ local function emptyMessage(page, kind, loading, states)
     if page == "shop" and (states.noauction or states.nocraftpilot) then
         return L("No upgrades here. The auction house needs Auctionator with a scan, crafting needs CraftPilot.")
     end
-    if (GP.settings.slotFilter or "all") ~= "all" then return L("No upgrades for this slot. Choose all slots or another slot.") end
+    if page ~= "route" and (GP.settings.slotFilter or "all") ~= "all" then return L("No upgrades for this slot. Choose all slots or another slot.") end
     if kind == "clutter" then return L("Nothing to get rid of: all gear in your bags is useful.") end
     if kind == "routepick" then return L("No quests you can take here. Try All zones.") end
     if kind == "questlog" then return L("Your quest log is empty.") end
     if kind == "questlater" then return L("No remembered quests. Abandon a quest with Remember under Quest log to find it here again.") end
     if kind == "routeskip" then return L("No skipped quests.") end
+    if page == "route" and states.chosenZone then
+        return L("No matching open quests in your chosen zone. Choose another zone or use the recommendation.")
+    end
     if page == "route" and GP.settings.routeMode == "mine" then
         return L("Your own route is empty. Choose quests under Choose quests and add them with Add to my route.")
     end
@@ -2686,7 +2765,18 @@ function fillRow(r, kind, data, width, list)
     color(r.name, C.text)
     r.name:SetWidth(width - 120)
     r.sub:SetWidth(width - 120)
-    if kind == "gear" then
+    if data.section then
+        r.icon:SetTexture(nil)
+        r.name:SetText(data.section)
+        color(r.name, C.gold)
+        r.sub:SetText("")
+        r.value:SetText("")
+    elseif kind == "routezones" then
+        r.icon:SetTexture("Interface\\Icons\\INV_Misc_Map_01")
+        r.name:SetText(data.name or ("#" .. data.id))
+        r.sub:SetText(data.sub)
+        r.value:SetText("")
+    elseif kind == "gear" then
         r.icon:SetTexture(item and item.icon or "Interface\\PaperDoll\\UI-Backpack-EmptySlot")
         r.name:SetText(item and (S.QualityColor(item.quality) .. (item.name or L("Loading item data …")) .. "|r")
             or ("|cff9dabb8" .. L("Empty slot") .. "|r"))
@@ -2762,7 +2852,8 @@ function fillRow(r, kind, data, width, list)
             if (data.wishCount or 0) > 0 then parts[#parts + 1] = (L("%d wishlist items"):format(data.wishCount)) end
         end
         r.sub:SetText(table.concat(parts, " · "))
-        r.value:SetText(data.expected > 0 and ("Ø " .. signed(data.expected)) or "")
+        local loot = data.dropExpected or 0
+        r.value:SetText(loot > 0 and ("Ø " .. signed(loot)) or "")
         color(r.value, data.inRange and C.green or C.muted)
     elseif kind == "route" then
         if data.travel then
@@ -2949,14 +3040,17 @@ function GP.Render()
     local offset = old and old.context == selectKey and (U.listScroll:GetVerticalScroll() or 0) or 0
     local anchor = old and old.context == selectKey and old.list[math.floor(offset / 46) + 1]
     local anchorKey = anchor and (anchor.key or anchor.entry.key)
-    local found, nextOffset
+    local found, firstItem, nextOffset
     for i, data in ipairs(list) do
         local key = data.key or data.entry.key
-        if key == selected then found = data end
+        if not data.section then
+            firstItem = firstItem or data
+            if key == selected then found = data end
+        end
         if key == anchorKey then nextOffset = (i - 1) * 46 + offset % 46 end
     end
     if not found then
-        found = list[1]
+        found = firstItem
         if not loading or not selected then
             GP.selected[selectKey] = found and (found.key or found.entry.key) or nil
         end
@@ -2977,7 +3071,7 @@ function GP.Render()
         U.empty:Hide()
     end
     for _, b in ipairs(U.nav) do
-        if b.key == page and page ~= "gear" and #list > 0 then b.badge:SetText(tostring(#list)) end
+        if b.key == page and page ~= "gear" and #list > 0 then b.badge:SetText(tostring(list.upgradeCount or #list)) end
     end
 
     -- Detail
@@ -3003,6 +3097,13 @@ function GP.Render()
         showClutter(found, list.total)
     elseif kind == "route" then
         showRouteTask(found, profile, equipped)
+    elseif kind == "routezones" then
+        showHead("Interface\\Icons\\INV_Misc_Map_01", found.name or ("#" .. found.id), found.sub)
+        actions({ found.automatic and L("Use recommendation") or L("Quest in this zone"), function()
+            GP.settings.views.route = "route"
+            GP.QuestRoute.SetZone(found.id)
+            GP.Render()
+        end, 200 })
     elseif kind == "classquest" then
         showClassChain(found)
     elseif kind == "routepick" then

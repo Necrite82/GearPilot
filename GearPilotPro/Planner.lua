@@ -597,6 +597,17 @@ function Planner.ByZone(results)
     return list
 end
 
+-- Keep the original score order inside each source group.
+function Planner.UpgradeGroups(results)
+    local groups = { {}, {}, {}, {} }
+    local groupFor = { Bags = 1, Quests = 2, Dungeons = 3 }
+    for _, result in ipairs(results) do
+        local group = groups[groupFor[result.entry.source] or 4]
+        group[#group + 1] = result
+    end
+    return groups
+end
+
 -- Dungeon upgrades: per dungeon the expected gain of one run (gain x drop chance; an unknown chance counts
 -- with its loot table estimate or UNKNOWN_CHANCE and is marked), its bosses and the dungeon quests with an upgrade.
 Planner.UNKNOWN_CHANCE = 0.1
@@ -606,13 +617,15 @@ function Planner.ByDungeon(dropResults, questResults)
         local row = result.entry.row
         local entry = dungeons[row.name]
         if not entry then
-            entry = { key = "dungeon:" .. row.name, name = row.name, row = row, results = {}, quests = {}, expected = 0,
+            entry = { key = "dungeon:" .. row.name, name = row.name, row = row, results = {}, quests = {}, expected = 0, dropExpected = 0,
                 unknown = 0, low = row.level, high = row.level }
             dungeons[row.name] = entry
             list[#list + 1] = entry
         end
         entry.results[#entry.results + 1] = result
-        entry.expected = entry.expected + result.gain * (row.chance or row.estimate or Planner.UNKNOWN_CHANCE)
+        local gain = result.gain * (row.chance or row.estimate or Planner.UNKNOWN_CHANCE)
+        entry.dropExpected = entry.dropExpected + gain
+        entry.expected = entry.expected + gain
         if not row.chance and not row.estimate then entry.unknown = entry.unknown + 1 end
         if not row.chance and row.estimate then entry.estimated = (entry.estimated or 0) + 1 end
         entry.low = math.min(entry.low, row.level)
@@ -626,7 +639,7 @@ function Planner.ByDungeon(dropResults, questResults)
             if not entry then
                 -- A dungeon with only a quest upgrade is still worth the trip.
                 entry = { key = "dungeon:" .. name, name = name, row = { name = name, level = row.level }, results = {},
-                    quests = {}, expected = 0, unknown = 0, low = row.level, high = row.level }
+                    quests = {}, expected = 0, dropExpected = 0, unknown = 0, low = row.level, high = row.level }
                 dungeons[name] = entry
                 list[#list + 1] = entry
             end
