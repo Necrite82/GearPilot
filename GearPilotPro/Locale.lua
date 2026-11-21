@@ -470,6 +470,22 @@ local de = {
     ["Location reached"] = "Ort erreicht",
     ["The route moves on when the quest log confirms progress."] = "Die Route geht weiter, sobald das Questlog den Fortschritt bestätigt.",
     ["Replaces %s"] = "Ersetzt %s",
+    ["Destination"] = "Zielgebiet",
+    ["Choose zone"] = "Gebiet wählen",
+    ["Choose where to quest now"] = "Wähle, wo du jetzt questen willst",
+    ["Use recommendation"] = "Empfehlung nutzen",
+    ["Quest in this zone"] = "Hier questen",
+    ["Your choice"] = "Deine Wahl",
+    ["Recommended: %s"] = "Empfehlung: %s",
+    ["No matching open quests"] = "Keine passenden offenen Quests",
+    ["No matching open quests in your chosen zone. Choose another zone or use the recommendation."] =
+        "Im gewählten Gebiet sind keine passenden Quests offen. Wähle ein anderes Gebiet oder nutze die Empfehlung.",
+    ["Loot per run"] = "Beute pro Lauf",
+    ["Best open quest upgrade"] = "Bestes offenes Questupgrade",
+    ["Best repeatable drops"] = "Stärkste wiederholbare Beute",
+    ["Accept from %s"] = "Annehmen bei %s",
+    ["Turn in to %s"] = "Abgeben bei %s",
+    ["%d of %d left · %s"] = "Noch %d von %d · %s",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

@@ -219,6 +219,14 @@ local dungeons = P.ByDungeon({ res(nil, 10, nil, 0.2, "The Deadmines", "VanCleef
     { res(nil, 3, "The Deadmines") })
 assert(dungeons[1].name == "The Deadmines" and math.abs(dungeons[1].expected - 5) < 1e-9 and #dungeons[1].quests == 1)
 assert(dungeons[2].unknown == 1 and math.abs(dungeons[2].expected - 10 * P.UNKNOWN_CHANCE) < 1e-9)
+assert(dungeons[1].dropExpected==2,"The per-run score excludes the one-time quest reward")
+do
+    local highQuest = { entry = { source = "Quests" }, gain = 90 }
+    local bag1 = { entry = { source = "Bags" }, gain = 10 }
+    local bag2 = { entry = { source = "Bags" }, gain = 5 }
+    local groups = P.UpgradeGroups({ highQuest, bag1, bag2 })
+    assert(groups[1][1]==bag1 and groups[1][2]==bag2 and groups[2][1]==highQuest)
+end
 local worn2 = { [5] = item(90, { AGI = 10 }) }
 local clutter = P.Clutter({ { key = "a", item = item(91, { AGI = 3 }) }, { key = "b", item = item(92, { AGI = 30 }) },
     { key = "c", item = item(93, { AGI = 3 }, 10, nil, 4, 4) }, { key = "d", item = item(94, { AGI = 1 }) } },
@@ -470,6 +478,16 @@ local ids = {}
 for _, q in ipairs(plan.quests) do ids[q.id] = true end
 assert(plan.zone.name == "Westfall" and ids[1] and ids[5] and not ids[2] and not ids[4] and not ids[6], "available quests of the best zone")
 assert(plan.next and plan.next.name == "Stranglethorn")
+routeCtx.zone, routeCtx.focusedQuest = 33, 1
+local chosen = QR.Plan(routeDb, routeCtx)
+assert(chosen.zone.name=="Stranglethorn" and chosen.recommended.name=="Westfall",
+    "A player-selected zone wins over scoring and the previously followed step")
+assert(#chosen.quests==1 and chosen.quests[1].id==3 and not chosen.next)
+routeCtx.zone=999
+local empty = QR.Plan(routeDb, routeCtx)
+assert(empty.chosenZone==999 and empty.zone.zone==999 and #empty.tasks==0 and empty.recommended.zone==40,
+    "An empty chosen zone stays selected instead of falling back to the recommendation")
+routeCtx.zone, routeCtx.focusedQuest = nil, nil
 local order = {}
 for i, t in ipairs(plan.tasks) do order[t.kind .. t.quest.id] = i end
 assert(order.accept1 < order.objective1 and order.objective1 < order.turnin1, "accept, objective, turn in")
