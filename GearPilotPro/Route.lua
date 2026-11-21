@@ -42,6 +42,42 @@ function Route.Chain(questID)
     return steps
 end
 
+-- Availability from the quest log and known requirements, independent of route filters.
+function Route.QuestAccess(questID)
+    local chain = Route.Chain(questID)
+    local _, index = GP.Planner.ChainStatus(chain)
+    local quest = chain[#chain]
+    if not quest or quest.id ~= questID then return L("Quest status unknown"), nil, chain end
+    if quest.done then return L("Quest completed"), nil, chain end
+    if quest.active then return L("In quest log"), nil, chain end
+    local nextStep = index and chain[index]
+    local db, player = ForeverDB, GP.Player()
+    local detail = db.qx and db.qx[questID]
+    local log = C_QuestLog
+    if not (log and log.IsQuestFlaggedCompleted and log.IsOnQuest) then
+        return L("Quest status unknown"), quest.giver and quest or nil, chain
+    end
+    if detail and GP.Sources.Excluded({ exclusive = type(detail[5]) == "table" and detail[5] or nil }) then
+        return L("Alternative quest completed"), nil, chain
+    end
+    for _, step in ipairs(chain) do
+        if step.active then return L("Prerequisite in quest log") .. " · " .. step.title, nil, chain end
+    end
+    if nextStep and nextStep.id ~= questID then
+        if (nextStep.minLevel or 0) > player.level then
+            return (L("Next step from level %d.")):format(nextStep.minLevel), nil, chain
+        end
+        return L("Prerequisite open") .. " · " .. nextStep.title, nextStep, chain
+    end
+    if (quest.minLevel or 0) > player.level then
+        return (L("from level %d")):format(quest.minLevel), nil, chain
+    end
+    if not detail or not quest.giver then
+        return L("Quest status unknown"), quest.giver and quest or nil, chain
+    end
+    return L("Available by known requirements"), quest, chain
+end
+
 local function tomtom()
     return type(TomTom) == "table" and type(TomTom.AddWaypoint) == "function"
 end

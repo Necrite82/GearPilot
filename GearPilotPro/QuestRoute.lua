@@ -400,14 +400,26 @@ function QR.Plan(db, ctx)
     end
     local zones = QR.Zones(usable, ctx.position)
     local zone = zones[1]
+    local focused
+    if ctx.focusedQuest then
+        for _, candidateZone in ipairs(zones) do
+            for _, quest in ipairs(candidateZone.quests) do
+                if quest.id == ctx.focusedQuest then zone, focused = candidateZone, quest; break end
+            end
+            if focused then break end
+        end
+    end
     if not zone then return { zones = zones, tasks = {}, quests = {}, xp = 0, candidates = candidates } end
     local quests = {}
     for _, q in ipairs(zone.quests) do quests[#quests + 1] = q end
     table.sort(quests, function(a, b) return a.value > b.value end)
-    while #quests > QR.MAX_QUESTS do table.remove(quests) end
+    while #quests > QR.MAX_QUESTS do
+        local index = quests[#quests] == focused and #quests - 1 or #quests
+        table.remove(quests, index)
+    end
     local xp = 0
     for _, q in ipairs(quests) do xp = xp + q.xp end
-    return { zone = zone, zones = zones, quests = quests, xp = xp, next = zones[2], candidates = candidates,
+    return { zone = zone, zones = zones, quests = quests, xp = xp, next = zone == zones[1] and zones[2] or zones[1], candidates = candidates,
         tasks = QR.Order(quests, ctx.position, ctx.complete, ctx.rank) }
 end
 
@@ -506,6 +518,7 @@ function QR.Current()
         hideEscort = s.routeEscort ~= true,
         mine = s.routeMode == "mine" and s.routeMine or nil,
         rank = QR.Rank(),
+        focusedQuest = QR.following and QR.currentKey and QR.current and not QR.TaskDone(QR.current) and QR.current.quest.id,
         xp = function(id, level)
             if xpCache[id] == nil then
                 local value = GP.QuestXP.Get(id, level)
@@ -551,8 +564,7 @@ QR.Store = store
 local function changed()
     QR.Invalidate()
     if QR.following then
-        local nextTask = QR.NextTask()
-        if nextTask and QR.TaskKey(nextTask) ~= QR.currentKey then QR.Follow(true) end
+        QR.Follow(true, true)
     end
     if GP.ScheduleRefresh then GP.ScheduleRefresh() end
     if GP.Tracker then GP.Tracker.Refresh() end
@@ -610,7 +622,7 @@ end
 
 -- A task is done when its quest moved past it.
 -- Progress of an objective from your quest log: true/false when an objective of the quest names this target,
--- nil when the quest is not in your log or no objective matches (then reaching the place counts).
+-- nil when the quest is not in your log or no objective matches. Proximity is displayed separately.
 function QR.ObjectiveState(t)
     if not (GP.QuestInfo and onQuest(t.quest.id)) then return nil end
     local names = {}
@@ -628,7 +640,7 @@ end
 -- A task keeps its key when the plan is built again (new tables after every quest log update).
 function QR.TaskKey(t)
     if not t then return nil end
-    return t.kind .. ":" .. t.quest.id .. ":" .. tostring(t.item or t.npc or t.label or "")
+    return t.kind .. ":" .. t.quest.id .. ":" .. tostring(t.item or t.ref or t.npc or t.label or "")
 end
 QR.reached = {}
 function QR.TaskDone(t)
@@ -644,8 +656,7 @@ function QR.TaskDone(t)
         -- 1.5.1: a quest in your log tells its progress; reaching the place only counts where it does not.
         local state = QR.ObjectiveState(t)
         if state ~= nil then return state end
-        if t.buy then return false end
-        return t.reached == true or QR.reached[QR.TaskKey(t)] == true
+        return false
     end
     return false
 end
@@ -706,7 +717,8 @@ function QR.TaskText(t)
             local vendor = QR.VendorName(t)
             return L("Buy") .. ": " .. (label or "?") .. count .. (vendor and (" · " .. vendor) or "")
         end
-        return L("Objective") .. (label and (": " .. label) or "")
+        local arrived = QR.reached[QR.TaskKey(t)] and (" · " .. L("Location reached")) or ""
+        return L("Objective") .. (label and (": " .. label) or "") .. arrived
     end
     return L("Turn in")
 end
@@ -733,35 +745,47 @@ function QR.VendorName(t)
     return (GP.Names and GP.Names.Get(npcID)) or (db and db.npc and db.npc[npcID] and db.npc[npcID][1]) or nil
 end
 
--- Follow: waypoint to the next open task; moves on when a quest is accepted, completed or turned in, and when
--- you reach an objective's place.
+-- Follow the current open step until the quest log confirms progress.
 local function say(text) if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffe0b050GearPilot|r " .. text) end end
 -- Open steps in order. A turn-in whose quest is in your log but not complete waits at the end: you are not
 -- sent to turn in before the objectives are done.
 function QR.Blocked(t)
     return t.kind == "turnin" and onQuest(t.quest.id) and not complete(t.quest.id)
 end
+local function canTrack(t)
+    return t.kind == "accept" or onQuest(t.quest.id)
+end
 function QR.OpenTasks(plan)
     local open, waiting = {}, {}
+    local tracked
     for i, t in ipairs(plan and plan.tasks or {}) do
         if not QR.TaskDone(t) then
             local entry = { t = t, index = i }
-            if QR.Blocked(t) then waiting[#waiting + 1] = entry else open[#open + 1] = entry end
+            if QR.Blocked(t) then waiting[#waiting + 1] = entry
+            elseif QR.following and canTrack(t) and QR.TaskKey(t) == QR.currentKey then tracked = entry
+            else open[#open + 1] = entry end
         end
     end
+    if tracked then table.insert(open, 1, tracked) end
     for _, entry in ipairs(waiting) do open[#open + 1] = entry end
     return open
 end
-function QR.NextTask()
+function QR.NextTask(preferredKey)
     -- Same order as OpenTasks, without building the list (called every second while following).
     local plan = QR.Current()
-    local waiting, waitingIndex
+    local keep = preferredKey or (QR.following and QR.currentKey)
+    local first, firstIndex, waiting, waitingIndex
     for i, t in ipairs(plan and plan.tasks or {}) do
         if not QR.TaskDone(t) then
-            if not QR.Blocked(t) then return t, i end
-            if not waiting then waiting, waitingIndex = t, i end
+            if not QR.Blocked(t) then
+                if not keep or (canTrack(t) and QR.TaskKey(t) == keep) then return t, i end
+                if not first then first, firstIndex = t, i end
+            elseif not waiting then
+                waiting, waitingIndex = t, i
+            end
         end
     end
+    if first then return first, firstIndex end
     return waiting, waitingIndex
 end
 -- 1.4.0: the route's previous TomTom point goes when the next step starts (or the route stops); the game's own
@@ -770,21 +794,23 @@ function QR.ClearTomTom()
     if QR.tomtom and type(TomTom) == "table" and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, QR.tomtom) end
     QR.tomtom = nil
 end
-function QR.Follow(on, force)
+function QR.Follow(on, force, preferredKey)
     QR.following = on
     if not on or force then QR.currentKey = nil end
-    if GP.Tracker and GP.Tracker.Refresh then GP.Tracker.Refresh() end
     if not on then
+        QR.current = nil
+        if GP.Tracker and GP.Tracker.Refresh then GP.Tracker.Refresh() end
         QR.ClearTomTom()
         if QR.ownWaypoint and C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
         QR.ownWaypoint = false
         return
     end
-    local t, i = QR.NextTask()
+    local t, i = QR.NextTask(preferredKey)
     if not t then
         say(L("Quest route: nothing left here. Open the route for the next zone."))
         QR.ClearTomTom()
-        QR.following = false
+        QR.following, QR.current, QR.currentKey = false, nil, nil
+        if GP.Tracker then GP.Tracker.Refresh() end
         return
     end
     -- 1.4.0: only a new step sets the waypoint and writes to the chat (the plan is rebuilt on every quest log
@@ -792,6 +818,7 @@ function QR.Follow(on, force)
     local key = QR.TaskKey(t)
     local changed = key ~= QR.currentKey
     QR.current, QR.currentKey = t, key
+    if GP.Tracker and GP.Tracker.Refresh then GP.Tracker.Refresh() end
     if not changed then return end
     local uiMap, x, y = QR.MapPoint(t)
     if uiMap and x and C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
@@ -851,24 +878,23 @@ events:SetScript("OnEvent", function(_, event)
         if GP.ScheduleRefresh then GP.ScheduleRefresh() end
     end)
 end)
--- Reaching an objective's place counts it as reached (the game does not tell which objective belongs where).
+-- Reaching the coordinates says where you are; only quest progress completes the objective.
 local elapsed = 0
 events:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
     if elapsed < 1 or not QR.following then return end
     elapsed = 0
     local t = QR.current
-    if t and t.kind == "objective" and not t.reached and not t.buy then
+    if t and t.kind == "objective" and not QR.reached[QR.TaskKey(t)] and not t.buy then
         local here = QR.Position()
         if here and distance(here, t.p) < 40 then
-            t.reached = true
             QR.reached[QR.TaskKey(t)] = true
-            QR.Follow(true)
-            return
+            if GP.Tracker then GP.Tracker.Refresh() end
+            if GP.ScheduleRefresh then GP.ScheduleRefresh() end
         end
     end
     -- 1.6.0: the next step changed without a quest event (your own order, skip, my route, a route setting):
     -- the waypoint follows at once instead of pointing to the old step.
     local nextTask = QR.NextTask()
-    if nextTask and QR.TaskKey(nextTask) ~= QR.currentKey then QR.Follow(true) end
+    if QR.TaskKey(nextTask) ~= QR.currentKey then QR.Follow(true) end
 end)

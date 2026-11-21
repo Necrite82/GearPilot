@@ -460,6 +460,16 @@ local de = {
     -- 1.4.0
     ["Detour: objectives and turn-ins of quests you already have come first when they lie on the way to the next step and make the way at most this much longer (at least 60 m always count). Off: always the nearest step."] =
         "Umweg: Ziele und Abgaben von Quests, die du schon hast, kommen zuerst dran, wenn sie auf dem Weg zum nächsten Schritt liegen und den Weg höchstens um so viel verlängern (60 m zählen immer). Aus: immer der nächstgelegene Schritt.",
+    ["Quest status unknown"] = "Queststatus unbekannt",
+    ["Quest completed"] = "Quest abgeschlossen",
+    ["In quest log"] = "Im Questlog",
+    ["Prerequisite open"] = "Vorquest offen",
+    ["Prerequisite in quest log"] = "Vorquest im Questlog",
+    ["Alternative quest completed"] = "Alternative Quest abgeschlossen",
+    ["Available by known requirements"] = "Bekannte Voraussetzungen erfüllt",
+    ["Location reached"] = "Ort erreicht",
+    ["The route moves on when the quest log confirms progress."] = "Die Route geht weiter, sobald das Questlog den Fortschritt bestätigt.",
+    ["Replaces %s"] = "Ersetzt %s",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key
