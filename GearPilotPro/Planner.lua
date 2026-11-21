@@ -231,6 +231,19 @@ local function baseline(slot, item, equipped, profile)
     return base, current
 end
 
+local function pairedSlot(slot)
+    if slot == 11 or slot == 13 then return slot + 1 end
+    if slot == 12 or slot == 14 then return slot - 1 end
+end
+local function fitsPair(item, other)
+    if not other then return true end
+    if item.id and item.id == other.id and (item.unique or other.unique) then return false end
+    if item.limitCategory and item.limitCategory == other.limitCategory then
+        return math.min(item.limitMax or 1, other.limitMax or 1) >= 2
+    end
+    return true
+end
+
 -- candidates: { key, source, level?, choiceGroup?, item = {id, link, equip, minLevel, classID, subclassID, stats} }
 -- options: { level, below, above, profile, class }
 -- options: { level, below, above, profile, class, slotAllowed (optional: slot -> boolean),
@@ -255,14 +268,12 @@ function Planner.Recommend(candidates, equipped, options)
         if slots and inRange and item.minLevel and item.minLevel <= targetLevel
             and Planner.CanUse(item, options.class, wearLevel) then
             local score = Planner.Score(item, options.profile)
-            local unique = (item.equip == "INVTYPE_FINGER" or item.equip == "INVTYPE_TRINKET") and item.id
-            local duplicate = unique and slots and ((equipped[slots[1]] and equipped[slots[1]].id == item.id)
-                or (slots[2] and equipped[slots[2]] and equipped[slots[2]].id == item.id))
             local best
-            if score and not duplicate then
+            if score then
                 for _, slot in ipairs(slots) do
                     -- The slot filter applies before the best slot and the best reward of a quest are chosen.
-                    local allowed = not options.slotAllowed or options.slotAllowed(slot)
+                    local allowed = (not options.slotAllowed or options.slotAllowed(slot))
+                        and fitsPair(item, equipped[pairedSlot(slot)])
                     local base, current, second = baseline(slot, item, equipped, options.profile)
                     local worn = current and current.link and current.link == item.link
                     local inSlot = Planner.SlotScore(item, options.profile, slot)
@@ -306,17 +317,18 @@ function Planner.Compare(item, equipped, profile, class, level)
     if not slots or not item.stats then return nil end
     if not Planner.CanUse(item, class, math.max(level, item.minLevel or 0)) then return { usable = false } end
     if item.equip == "INVTYPE_WEAPON" and dualWield(class, level) then slots = {16, 17} end
-    local best
+    local best, worn
     for _, slot in ipairs(slots) do
         local score = Planner.SlotScore(item, profile, slot)
         local base, current = baseline(slot, item, equipped, profile)
         if current and current.link and current.link == item.link then
-            return { usable = true, worn = true, slot = slot, score = score }
-        end
-        if base and (not best or score - base > best.gain) then
+            worn = { usable = true, worn = true, slot = slot, score = score }
+        elseif base and fitsPair(item, equipped[pairedSlot(slot)]) and (not best or score - base > best.gain) then
             best = { usable = true, slot = slot, gain = score - base, base = base, score = score, current = current }
         end
     end
+    -- A matching link in the first ring slot does not rule out a useful second copy in the other slot.
+    if worn and (not best or best.gain <= 0) then return worn end
     if best and best.base > 0 then best.percent = best.gain / best.base * 100 end
     return best
 end

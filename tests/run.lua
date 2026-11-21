@@ -113,6 +113,7 @@ assert(#rogue == 1 and rogue[1].slot == 17 and rogue[1].gain == (10 - 5) * 4 * 0
 
 -- Rings: no duplicate unique ring, second ring slot used.
 local rings = { [11] = item(60, { AGI = 9 }, 10, "INVTYPE_FINGER", 4, 0), [12] = item(61, { AGI = 3 }, 10, "INVTYPE_FINGER", 4, 0) }
+rings[11].unique = true
 local ring = P.Recommend({ row("ring", "Bags", nil, item(62, { AGI = 5 }, 10, "INVTYPE_FINGER", 4, 0)),
     row("dup", "Bags", nil, rings[11]) }, rings, opts)
 assert(#ring == 1 and ring[1].slot == 12 and ring[1].gain == 2)
@@ -509,4 +510,5 @@ for _, inst in ipairs(data.DungeonData.instances) do
 end
 for _, id in ipairs({ 2970, 2994, 2998, 2999, 3039, 3065 }) do assert(ids[id] and #ids[id].bosses > 0, "dungeon " .. id) end
 
+assert(loadfile("tests/review_172.lua"))(GP)
 print("GearPilot checks passed")

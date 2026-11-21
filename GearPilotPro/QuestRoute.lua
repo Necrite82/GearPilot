@@ -475,6 +475,12 @@ function QR.Current()
     local db = ForeverDB
     if not db then return nil end
     local s = GP.settings
+    local profileKey = GP.Planner.Signature(GP.ActiveProfile())
+    if QR.profileKey ~= profileKey then
+        QR.profileKey = profileKey
+        QR.own = nil
+        QR.Invalidate()
+    end
     -- A changed route setting (focus, dungeon or escort quests, automatic or your own) means a new plan.
     local key = table.concat({ tostring(s.routeFocus), tostring(s.routeDungeon), tostring(s.routeEscort), tostring(s.routeMode),
         tostring(s.routeDetour) }, ":")

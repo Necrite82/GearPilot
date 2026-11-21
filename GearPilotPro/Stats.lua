@@ -129,6 +129,34 @@ local function tooltipLines(link)
     return lines
 end
 
+-- Rings and trinkets may be worn twice unless the item itself (or its equip category) limits them.
+-- GetItemUniqueness returns category/max; GetItemUniquenessByID also reports ownership-unique items.
+function Stats.ItemLimits(ref)
+    local unique, category, maximum
+    if C_Item and type(C_Item.GetItemUniquenessByID) == "function" then
+        local ok, isUnique, _, count, id = pcall(C_Item.GetItemUniquenessByID, ref)
+        if ok then
+            if type(isUnique) == "boolean" then unique = isUnique end
+            if type(id) == "number" and id > 0 then category, maximum = id, count end
+        end
+    end
+    if C_Item and type(C_Item.GetItemUniqueness) == "function" then
+        local ok, id, count = pcall(C_Item.GetItemUniqueness, ref)
+        if ok and type(id) == "number" and id > 0 then category, maximum = id, count end
+    end
+    -- Older clients can lack both APIs. The localized tooltip still states the item's restriction.
+    if unique == nil and not category then
+        for _, line in ipairs(tooltipLines(ref)) do
+            local text = line:lower():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            if text:match("^unique") or text:match("^einzigartig") then
+                unique = (tonumber(text:match("%((%d+)%)")) or 1) == 1
+                break
+            end
+        end
+    end
+    return unique == true, category, type(maximum) == "number" and maximum or nil
+end
+
 -- Profession tools and profession gear: never "can go", even when your class cannot wield them.
 -- Known tools by ID, tool names (EN/DE), and tooltip lines naming a profession ("Requires Engineering",
 -- "Fishing +5", "Angeln um 5 erhöht").
