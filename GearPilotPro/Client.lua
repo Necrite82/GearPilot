@@ -20,6 +20,9 @@ local function itemData(ref)
         equip = equip, icon = icon, classID = classID, subclassID = subclassID, sellPrice = sellPrice,
     }
     item.stats = GP.Stats.Read(link, item)
+    if equip == "INVTYPE_FINGER" or equip == "INVTYPE_TRINKET" then
+        item.unique, item.limitCategory, item.limitMax = GP.Stats.ItemLimits(link)
+    end
     return item
 end
 GP.ItemData = itemData

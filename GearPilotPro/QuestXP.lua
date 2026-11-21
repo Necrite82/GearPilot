@@ -124,7 +124,11 @@ events:SetScript("OnEvent", function(_, _, questID, success)
     if not success or not questID then return end
     local xp, money = fromServer(questID)
     if xp or money then
-        cache()[questID] = { xp = xp, money = money, level = GP.Player().level }
+        local known, level = cache(), GP.Player().level
+        local previous = known[questID]
+        known[questID] = { xp = xp, money = money, level = level }
+        if (not previous or previous.xp ~= xp or previous.money ~= money or previous.level ~= level)
+            and GP.QuestRoute then GP.QuestRoute.Invalidate() end
         if XP.waiting and XP.waiting[questID] then
             XP.waiting[questID] = nil
             if DEFAULT_CHAT_FRAME then
