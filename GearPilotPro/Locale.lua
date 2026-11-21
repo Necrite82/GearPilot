@@ -486,6 +486,17 @@ local de = {
     ["Accept from %s"] = "Annehmen bei %s",
     ["Turn in to %s"] = "Abgeben bei %s",
     ["%d of %d left · %s"] = "Noch %d von %d · %s",
+    ["Route options"] = "Routenoptionen",
+    ["Tasks in this zone"] = "Aufgaben im Gebiet",
+    ["Next tasks"] = "Nächste Aufgaben",
+    ["Next waypoint"] = "Nächster Wegpunkt",
+    ["Selected task"] = "Gewählte Aufgabe",
+    ["Ready to turn in"] = "Abgabebereit",
+    ["Available to accept"] = "Annahme offen",
+    ["Quest in progress"] = "Quest läuft",
+    ["Set waypoint"] = "Wegpunkt setzen",
+    ["%s points"] = "%s Punkte",
+    ["Profile: %s"] = "Profil: %s",
 }
 function GP.L(key)
     return GetLocale() == "deDE" and de[key] or key

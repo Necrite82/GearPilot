@@ -529,4 +529,5 @@ end
 for _, id in ipairs({ 2970, 2994, 2998, 2999, 3039, 3065 }) do assert(ids[id] and #ids[id].bosses > 0, "dungeon " .. id) end
 
 assert(loadfile("tests/review_172.lua"))(GP)
+assert(loadfile("tests/window_180.lua"))()
 print("GearPilot checks passed")
