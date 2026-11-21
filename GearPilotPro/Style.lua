@@ -6,9 +6,10 @@ local Style = {}
 GP.Style = Style
 
 Style.palette = {
-    window = {.078, .090, .110}, panel = {.098, .114, .137}, raised = {.122, .141, .172},
-    border = {.17, .196, .227}, gold = {.88, .69, .31}, text = {.91, .90, .87}, muted = {.60, .64, .68},
-    green = {.52, .84, .63}, red = {.92, .47, .42}, dark = {.11, .08, .02},
+    window = {.082, .094, .114}, sidebar = {.071, .082, .102}, panel = {.102, .122, .153}, raised = {.137, .165, .200},
+    border = {.188, .216, .255}, gold = {.937, .816, .541}, action = {.902, .741, .412},
+    text = {.922, .910, .882}, muted = {.663, .678, .714}, green = {.553, .847, .667},
+    red = {.92, .47, .42}, dark = {.11, .08, .02},
 }
 local ROUND = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\AddOns\\GearPilotPro\\Media\\Round",
     edgeSize = 6, insets = { left = 6, right = 6, top = 6, bottom = 6 } }
@@ -96,7 +97,8 @@ end
 
 local primaryFont
 function Style.Primary(b)
-    b:SetBackdropColor(.88, .69, .31, 1)
+    local fill = Style.palette.action
+    b:SetBackdropColor(fill[1], fill[2], fill[3], 1)
     -- Larger and darker than the normal button text: dark text on gold needs the weight to stay readable.
     primaryFont = primaryFont or Style.Font("GameFontHighlight", .06, .04, 0)
     b:SetNormalFontObject(primaryFont)

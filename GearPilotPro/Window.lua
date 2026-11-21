@@ -59,6 +59,7 @@ local function listWidth()
     return math.max(LIST, math.floor((frame:GetWidth() - 36) * 0.42))
 end
 local header = CreateFrame("Frame", nil, frame)
+U.header = header
 header:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
 header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
 header:SetHeight(92)
@@ -67,6 +68,7 @@ header:RegisterForDrag("LeftButton")
 header:SetScript("OnDragStart", startMove)
 header:SetScript("OnDragStop", stopMove)
 U.pageTitle = S.Text(header, "GameFontNormalLarge", 18, 25, W - 330)
+color(U.pageTitle, C.gold)
 U.pageSub = S.Text(header, "GameFontHighlightSmall", 18, 49, W - 60)
 U.pageSub:SetTextColor(.72, .70, .66)
 -- 1.3.5: close button in GearPilot's own style instead of the red default.
@@ -77,6 +79,7 @@ line:SetHeight(1)
 line:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -94)
 line:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -94)
 line:SetColorTexture(C.border[1], C.border[2], C.border[3], 1)
+U.headerLine = line
 
 -- Header chips: level window and data status. A click opens the settings.
 local function chip(width)
@@ -103,8 +106,15 @@ U.dungeonChip:SetPoint("RIGHT", U.rangeChip, "LEFT", -8, 0)
 tooltip(U.dungeonChip, function() return L("Dungeon range") end, function()
     return { L("Dungeons whose level range overlaps this range count for your upgrades. Set it in the settings.") }
 end)
-tooltip(U.rangeChip, function() return L("Level range") end, function()
-    return { L("Quests and the other sources in this range are compared; dungeons have their own range. Bag items are always compared.") }
+tooltip(U.rangeChip, function()
+    return GP.settings and GP.settings.page == "route" and L("Quest route") or L("Level range")
+end, function()
+    if GP.settings and GP.settings.page == "route" and (GP.settings.views.route or "route") == "route" then
+        return { GP.routeSummary }
+    end
+    local dLow, dHigh = GP.DungeonRange()
+    return { L("Quests and the other sources in this range are compared; dungeons have their own range. Bag items are always compared."),
+        (L("Dungeons %d–%d")):format(dLow, dHigh) }
 end)
 tooltip(U.dataChip, "ForeverDB", function()
     local build = GP.Sources.BuildDate()
@@ -127,7 +137,7 @@ U.footer:SetWordWrap(false)
 -- Sidebar ------------------------------------------------------------------------------------------------------
 local side = CreateFrame("Frame", "GearPilotProSidebar", frame, "BackdropTemplate")
 S.Round(side)
-side:SetBackdropColor(C.window[1], C.window[2], C.window[3], 1)
+side:SetBackdropColor(C.sidebar[1], C.sidebar[2], C.sidebar[3], 1)
 side:SetWidth(SIDE)
 side:SetPoint("TOPRIGHT", frame, "TOPLEFT", 1, 0)
 side:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", 1, 0)
@@ -203,6 +213,11 @@ local function navButton(key, caption)
     b.hl = b:CreateTexture(nil, "HIGHLIGHT")
     b.hl:SetAllPoints(b)
     b.hl:SetColorTexture(1, 1, 1, .05)
+    b.railMark = b:CreateTexture(nil, "BORDER")
+    b.railMark:SetWidth(2)
+    b.railMark:SetPoint("TOPLEFT", b, "TOPLEFT", 0, -3)
+    b.railMark:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 3)
+    b.railMark:SetColorTexture(C.action[1], C.action[2], C.action[3], 1)
     b.iconBox = b:CreateTexture(nil, "BORDER")
     b.iconBox:SetSize(26, 26)
     b.iconBox:SetPoint("LEFT", b, "LEFT", 6, 0)
@@ -263,6 +278,8 @@ U.listContent = CreateFrame("Frame", nil, U.listScroll)
 U.listContent:SetSize(LIST - 32, 10)
 U.listScroll:SetScrollChild(U.listContent)
 U.empty = S.Text(U.listPanel, "GameFontDisableSmall", 14, 14, LIST - 28)
+U.listLabel = S.Text(U.listPanel, "GameFontDisableSmall", 12, 8, LIST - 28, L("Tasks in this zone"))
+U.listLabel:Hide()
 
 U.detailPanel = S.Surface(frame, "panel")
 U.detailPanel:SetPoint("TOPLEFT", U.listPanel, "TOPRIGHT", 10, 0)
@@ -291,6 +308,8 @@ U.detailIconHover:SetScript("OnEnter", function(self)
     GameTooltip:Show()
 end)
 U.detailIconHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+U.detailKicker = S.Text(U.detail, "GameFontDisableSmall", 12, 8, 300)
+U.detailKicker:Hide()
 U.detailName = S.Text(U.detail, "GameFontNormalLarge", 60, 11, 300)
 U.detailSub = S.Text(U.detail, "GameFontDisableSmall", 60, 33, 300)
 U.action = S.Button(U.detail, 120, 26, "", nil)
@@ -307,6 +326,13 @@ U.bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -TOP)
 U.bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -TOP)
 U.bar:SetHeight(44)
 U.bar.pills = {}
+U.routeHeader = GP.CreateRouteHeader(frame, function() GP.Render() end)
+U.routeOptions = S.Button(header, 132, 24, L("Route options"), function()
+    U.routeOptionsOpen = not U.routeOptionsOpen
+    GP.Render()
+end)
+U.routeOptions:SetPoint("TOPRIGHT", header, "TOPRIGHT", -12, -43)
+U.routeOptions:Hide()
 local function setting(path)
     local s = GP.settings
     if path:find("%.") then
@@ -429,11 +455,6 @@ segmentPill({ "route" }, "View", 96, { { "route", "Route" }, { "pick", "Choose q
     { "log", "Quest log" }, { "later", "Remembered" }, { "skipped", "Skipped" } }, "views.route", "route")
 local routeMode = segmentPill({ "route" }, "Route from", 110, { { "auto", "Automatic" }, { "mine", "My quests" } }, "routeMode", "auto")
 routeMode.when = function() local v = routeView(); return v == "route" or v == "pick" end
-local routeZone = actionPill({ "route" }, "Destination", 130, { { "Choose zone", function()
-    GP.settings.views.route = "zones"
-    GP.Render()
-end } })
-routeZone.when = function() return routeView() == "route" end
 local routeFocus = segmentPill({ "route" }, "Focus", 110, { { "xp", "Experience" }, { "balanced", "Balanced" }, { "gear", "Gear" } }, "routeFocus", "balanced")
 routeFocus.when = function() return routeView() == "route" and GP.settings.routeMode ~= "mine" end
 local routeDungeon = segmentPill({ "route" }, "Dungeon quests", 110, { { false, "Hide" }, { true, "Show" } }, "routeDungeon", false)
@@ -550,11 +571,14 @@ for i, entry in ipairs({ { nil }, unpack(GP.ClassQuests.classes) }) do
     b:SetPoint("TOPLEFT", U.classMenu, "TOPLEFT", 8, -6 - (i - 1) * 26)
 end
 
-local function barRows(page)
+local function barRows(page, top, collapsed)
+    U.bar:ClearAllPoints()
+    U.bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -top)
+    U.bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -top)
     local available = frame:GetWidth() - 36 - 20
     local x, rows = 10, 0
     for _, p in ipairs(U.bar.pills) do
-        local on = p.pages[page] == true and (not p.when or p.when())
+        local on = not collapsed and p.pages[page] == true and (not p.when or p.when())
         p:SetShown(on)
         if on then
             local w = p:GetWidth()
@@ -676,7 +700,7 @@ end
 
 -- Detail lines: a pool of font strings placed one after another.
 local detailY
-local function detailLine(font, value, c, indent)
+local function detailLine(font, value, c, indent, columnWidth)
     local index = #U.lines.used + 1
     local t = U.lines[index]
     if not t then
@@ -689,7 +713,7 @@ local function detailLine(font, value, c, indent)
     t:SetFontObject(S.Font(font))
     t:ClearAllPoints()
     t:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 12 + (indent or 0), -detailY)
-    t:SetWidth(width)
+    t:SetWidth(columnWidth or width)
     t:SetText(value)
     c = c or C.text
     t:SetTextColor(c[1], c[2], c[3])
@@ -1057,6 +1081,7 @@ local function chainSteps(chain, targetID)
 end
 
 local function resetDetail()
+    U.detailKicker:Hide()
     for _, t in ipairs(U.lines) do t:Hide() end
     U.lines.used = {}
     S.HideMetrics(U.detail)
@@ -1179,7 +1204,15 @@ U.wishButton = S.Button(U.detail, 130, 24, "", function()
 end)
 U.wishButton:SetPoint("TOPRIGHT", U.detail, "TOPRIGHT", -12, -12)
 U.wishButton:Hide()
-local function showHead(icon, name, sub, link)
+local function showHead(icon, name, sub, link, kicker)
+    local inset = kicker and 18 or 0
+    U.detailKicker:SetText(kicker or "")
+    U.detailKicker:SetWidth(math.max(80, (U.detail:GetWidth() or 300) - 24))
+    U.detailKicker:SetShown(kicker ~= nil)
+    U.detailIcon:ClearAllPoints()
+    U.detailIcon:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 10, -(10 + inset))
+    U.detailName:ClearAllPoints()
+    U.detailName:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 60, -(11 + inset))
     U.detailIcon:SetTexture(icon or "Interface\\PaperDoll\\UI-Backpack-EmptySlot")
     U.detailName:SetText(name or "")
     U.detailSub:SetText(sub or "")
@@ -1196,7 +1229,10 @@ local function showHead(icon, name, sub, link)
     local width = (U.detail:GetWidth() or 300) - 72 - (link and 140 or 0)
     U.detailName:SetWidth(width)
     U.detailSub:SetWidth(width)
-    detailY = math.max(58, 40 + (U.detailName:GetStringHeight() or 16))
+    local titleHeight = math.max(17, U.detailName:GetStringHeight() or 17)
+    U.detailSub:ClearAllPoints()
+    U.detailSub:SetPoint("TOPLEFT", U.detail, "TOPLEFT", 60, -(14 + inset + titleHeight))
+    detailY = math.max(58 + inset, 22 + inset + titleHeight + (U.detailSub:GetStringHeight() or 14))
 end
 local function showItemHead(item, sub)
     showHead(item and item.icon, item and (S.QualityColor(item.quality) .. (item.name or "?") .. "|r") or L("No item equipped"),
@@ -1275,10 +1311,19 @@ local function craftedBlock(row)
     detailLine("GameFontDisableSmall", L("Materials, costs and where to learn it: CraftPilot (/cpp)."), C.muted)
 end
 
+local function upgradeReadout(label, value, tint)
+    local top = detailY
+    local labelWidth = 98
+    detailLine("GameFontDisableSmall", label, C.muted, nil, labelWidth)
+    local bottom = detailY
+    detailY = top
+    detailLine("GameFontHighlight", value, tint, labelWidth + 10)
+    detailY = math.max(bottom, detailY)
+end
+
 local function showUpgrade(result, profile)
     local item, entry, row = result.item, result.entry, result.entry.row
     showItemHead(item, ("%s · %s"):format(slotText(item, result.slot), sourceLine(entry)))
-    local width = (U.detail:GetWidth() or 300) - 24
     local replaced = result.current and result.current.name or L("Empty slot")
     if result.second and result.second.name then replaced = replaced .. " + " .. result.second.name end
     local third
@@ -1289,13 +1334,22 @@ local function showUpgrade(result, profile)
     else
         third = { label = L("Required level"), value = tostring(item.minLevel or "?") }
     end
-    S.Metrics(U.detail, {
-        { label = L("Score gain"), note = percentText(result.gain, result.score - result.gain), value = signed(result.gain),
-            color = C.green, emphasis = true },
-        { label = L("Replaces"), value = replaced, color = C.text },
-        third,
-    }, 12, detailY, width)
-    detailY = detailY + 60
+    if GP.settings.page == "upgrades" then
+        local percent = percentText(result.gain, result.score - result.gain)
+        upgradeReadout(L("Score gain"), (L("%s points"):format(signed(result.gain)))
+            .. (percent ~= "" and (" · " .. percent) or ""), C.green)
+        upgradeReadout(L("Replaces"), replaced)
+        upgradeReadout(third.label, third.value, C.muted)
+    else
+        local width = (U.detail:GetWidth() or 300) - 24
+        S.Metrics(U.detail, {
+            { label = L("Score gain"), note = percentText(result.gain, result.score - result.gain), value = signed(result.gain),
+                color = C.green, emphasis = true },
+            { label = L("Replaces"), value = replaced, color = C.text },
+            third,
+        }, 12, detailY, width)
+        detailY = detailY + 60
+    end
     local note = GP.Skills.Note(item)
     if note then detailLine("GameFontHighlightSmall", "|cffeba85a" .. note .. "|r") end
     if P.HeavyArmor(item, GP.Player().class) then
@@ -1870,15 +1924,15 @@ local function showRouteTask(data, profile, equipped)
     local t, q = data.task, data.task.quest
     local title = QR.Title(q)
     showHead(t.kind == "accept" and "Interface\\GossipFrame\\AvailableQuestIcon" or "Interface\\GossipFrame\\ActiveQuestIcon",
-        title, QR.TaskText(t) .. (q.zoneName and (" · " .. q.zoneName) or ""))
+        QR.TrackerAction(t), title .. (q.zoneName and (" · " .. q.zoneName) or ""), nil,
+        data.first and L("Next waypoint") or L("Selected task"))
     U.detailQuest, U.detailQuestTitle = q.id, q.title
-    local width = (U.detail:GetWidth() or 300) - 24
-    S.Metrics(U.detail, {
-        { label = L("Experience"), value = q.xp > 0 and GP.QuestXP.Text(q.xp) or "-", color = C.gold, emphasis = true },
-        { label = L("Best reward"), value = (q.gain or 0) > 0 and signed(q.gain) or "-", color = C.green },
-        { label = L("Quest level"), value = tostring(q.level or "?"), color = C.text },
-    }, 12, detailY, width)
-    detailY = detailY + 60
+    local ready = t.kind == "turnin" and C_QuestLog and C_QuestLog.IsComplete and C_QuestLog.IsComplete(q.id)
+    local progress = ready and L("Ready to turn in")
+        or t.kind == "accept" and L("Available to accept") or L("Quest in progress")
+    if (q.xp or 0) > 0 then progress = progress .. " · " .. GP.QuestXP.Text(q.xp) end
+    detailLine("GameFontHighlightSmall", progress, ready and C.green or C.text)
+    if q.level then detailLine("GameFontDisableSmall", (L("Quest level %d")):format(q.level), C.muted) end
     local uiMap, x, y = QR.MapPoint(t)
     local objectiveName = t.kind == "objective" and ((t.item and GP.ItemData(t.item).name) or t.label)
     local place = (t.buy and QR.VendorName(t)) or objectiveName or (t.kind == "accept" and ForeverDB and GP.Sources.GiverName(ForeverDB, q.giverRef))
@@ -1890,12 +1944,14 @@ local function showRouteTask(data, profile, equipped)
     elseif t.kind == "objective" then
         detailLine("GameFontDisableSmall", L("The route moves on when the quest log confirms progress."), C.muted)
     end
-    actions({ L("Waypoint"), function()
-        if uiMap and x then GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, title, QR.TaskText(t)) end
-    end, 140 }, { L("Map"), function()
-        if uiMap and x then GP.Map.Show(title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
-            title = title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil, infoQuest = q.id } }) end
-    end, 90 })
+    if uiMap and x and y then
+        actions({ L("Set waypoint"), function()
+            GP.Route.ToSpot({ world = false, map = uiMap, x = x, y = y }, title, QR.TaskText(t))
+        end, 140 }, { L("Map"), function()
+            GP.Map.Show(title, { { uiMap = uiMap, x = x, y = y, kind = t.kind == "accept" and "quest" or "active",
+                title = title, sub = QR.TaskText(t), questID = t.kind == "accept" and q.id or nil, infoQuest = q.id } })
+        end, 90 })
+    end
     -- 1.5.0: your own order, skip, your own route.
     local mine = GP.settings.routeMode == "mine"
     tools({
@@ -2347,20 +2403,7 @@ local function routeViewData(view)
     local plan = QR.Current()
     if not plan then return {}, false, { missing = true }, "route" end
     local list = {}
-    if view == "zones" then
-        local recommended = plan.recommended
-        list[1] = { key = "routezone:auto", name = L("Use recommendation"), automatic = true,
-            sub = recommended and (recommended.name or "?") or L("No matching open quests"), count = 0 }
-        for _, zone in ipairs(QR.ZoneChoices(ForeverDB, plan)) do
-            zone.key = "routezone:" .. zone.id
-            zone.sub = (L("%d open quests")):format(zone.count)
-            if zone.xp > 0 then zone.sub = zone.sub .. " · " .. GP.QuestXP.Text(zone.xp) end
-            if zone.id == GP.settings.routeZone then zone.sub = L("Your choice") .. " · " .. zone.sub end
-            list[#list + 1] = zone
-        end
-        GP.routeSummary = L("Choose where to quest now")
-        return list, false, {}, "routezones"
-    elseif view == "pick" then
+    if view == "pick" then
         -- Every quest you can take (or have), nearby or in all zones, best first; your picks marked.
         local here = QR.Position()
         local near = (GP.settings.routePick or "near") == "near"
@@ -2418,9 +2461,9 @@ local function routeData(player)
         local flight = QR.FlightName(node)
         list[#list + 1] = { key = "route:travel", travel = true, zone = zone, flight = flight }
     end
-    for _, entry in ipairs(QR.OpenTasks(plan)) do
-        local i, t = entry.index, entry.t
-        list[#list + 1] = { key = "route:" .. QR.TaskKey(t), task = t, index = i }
+    for position, entry in ipairs(QR.OpenTasks(plan)) do
+        local t = entry.t
+        list[#list + 1] = { key = "route:" .. QR.TaskKey(t), task = t, first = position == 1 }
     end
     -- Summary: zone, quests, experience and how far it gets you.
     local parts = {}
@@ -2771,11 +2814,6 @@ function fillRow(r, kind, data, width, list)
         color(r.name, C.gold)
         r.sub:SetText("")
         r.value:SetText("")
-    elseif kind == "routezones" then
-        r.icon:SetTexture("Interface\\Icons\\INV_Misc_Map_01")
-        r.name:SetText(data.name or ("#" .. data.id))
-        r.sub:SetText(data.sub)
-        r.value:SetText("")
     elseif kind == "gear" then
         r.icon:SetTexture(item and item.icon or "Interface\\PaperDoll\\UI-Backpack-EmptySlot")
         r.name:SetText(item and (S.QualityColor(item.quality) .. (item.name or L("Loading item data …")) .. "|r")
@@ -2867,9 +2905,9 @@ function fillRow(r, kind, data, width, list)
             local icons = { accept = "Interface\\GossipFrame\\AvailableQuestIcon", objective = "Interface\\Icons\\Ability_Hunter_SniperShot",
                 turnin = "Interface\\GossipFrame\\ActiveQuestIcon" }
             r.icon:SetTexture(t.buy and "Interface\\GossipFrame\\VendorGossipIcon" or icons[t.kind])
-            r.name:SetText(("%d. %s"):format(data.index, GP.QuestRoute.Title(t.quest)))
+            r.name:SetText(GP.QuestRoute.TrackerAction(t))
             GP.QuestInfo.Set(r.quest, t.quest.id, t.quest.title)
-            local sub = { GP.QuestRoute.TaskText(t) }
+            local sub = { GP.QuestRoute.Title(t.quest) }
             local here = GP.QuestRoute.Position()
             if t.p and here then
                 local d = GP.QuestRoute.Distance(here, t.p)
@@ -2967,6 +3005,23 @@ function GP.Render()
     if GP.TooltipChanged then GP.TooltipChanged() end
     local s = GP.settings
     local page = s.page
+    if page == "route" and s.views.route == "zones" then s.views.route = "route" end
+    local mainRoute = page == "route" and routeView() == "route"
+    local compact = mainRoute or page == "upgrades"
+    local headerY = compact and 73 or 94
+    U.header:SetHeight(headerY)
+    U.headerLine:ClearAllPoints()
+    U.headerLine:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -headerY)
+    U.headerLine:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -headerY)
+    U.pageTitle:ClearAllPoints()
+    U.pageTitle:SetPoint("TOPLEFT", U.header, "TOPLEFT", 18, compact and -15 or -25)
+    U.pageSub:ClearAllPoints()
+    U.pageSub:SetPoint("TOPLEFT", U.header, "TOPLEFT", 18, compact and -40 or -49)
+    U.dataChip:ClearAllPoints()
+    U.dataChip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, compact and -16 or -30)
+    U.dungeonChip:SetShown(not compact)
+    U.routeOptions:SetShown(mainRoute)
+    if not mainRoute then U.routeHeader:HideAll() end
     local player = GP.Player()
     local profile = GP.ActiveProfile()
     local low, high = P.Range(player.level, s.below, s.above)
@@ -2975,7 +3030,8 @@ function GP.Render()
     GP.questSummary = nil
     for _, b in ipairs(U.nav) do
         local on = b.key == page
-        b.iconBox:SetShown(on)
+        b.iconBox:Hide()
+        b.railMark:SetShown(on)
         if on then b.bg:SetColorTexture(C.raised[1], C.raised[2], C.raised[3], 1) else b.bg:SetColorTexture(1, 1, 1, 0) end
         if on then b.label:SetTextColor(.95, .94, .91) else b.label:SetTextColor(.72, .74, .76) end
         b.badge:SetText("")
@@ -2998,13 +3054,30 @@ function GP.Render()
 
     for _, c in pairs(U.controls) do c:Hide() end
     for _, t in ipairs(pageLines) do t:Hide() end
-    local rows = barRows(page)
-    local top = TOP + (rows > 0 and (rows * 36 + 20) or 0)
+    local top = compact and 83 or TOP
+    if mainRoute then
+        local plan = GP.QuestRoute.Current()
+        top = top + U.routeHeader:Render(plan, frame:GetWidth() - 36, top)
+        if plan then
+            local summary = (L("%d quests")):format(#plan.quests)
+            if plan.xp > 0 then summary = summary .. " · " .. GP.QuestXP.Text(plan.xp) end
+            U.rangeChip.label:SetText(summary)
+        end
+    end
+    local rows = barRows(page, top, mainRoute and not U.routeOptionsOpen)
+    if rows > 0 then top = top + rows * 36 + 20 end
     local listW = listWidth()
     U.listPanel:ClearAllPoints()
     U.listPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -top)
     U.listPanel:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, BOTTOM)
     U.listPanel:SetWidth(listW)
+    U.listLabel:SetWidth(listW - 28)
+    U.listLabel:SetShown(mainRoute)
+    U.listScroll:ClearAllPoints()
+    U.listScroll:SetPoint("TOPLEFT", U.listPanel, "TOPLEFT", 6, mainRoute and -28 or -6)
+    U.listScroll:SetPoint("BOTTOMRIGHT", U.listPanel, "BOTTOMRIGHT", -26, 6)
+    U.empty:ClearAllPoints()
+    U.empty:SetPoint("TOPLEFT", U.listPanel, "TOPLEFT", 14, mainRoute and -32 or -14)
     U.pageContent:SetWidth(frame:GetWidth() - 36 - 32)
     U.footer:SetWidth(frame:GetWidth() - 36)
     if page == "settings" or page == "help" then
@@ -3021,7 +3094,9 @@ function GP.Render()
     local equipped = GP.ReadGear()
     local list, loading, states, kind = pageData(page, s, low, high, equipped, profile, player)
     if page == "quests" and GP.questSummary then U.pageSub:SetText(L(titles[page][2]) .. "  ·  " .. GP.questSummary) end
-    if page == "route" and GP.routeSummary then U.pageSub:SetText(GP.routeSummary) end
+    if mainRoute then U.pageSub:SetText(L("Next tasks"))
+    elseif page == "route" and GP.routeSummary then U.pageSub:SetText(GP.routeSummary) end
+    if page == "upgrades" then U.pageSub:SetText((L("Profile: %s")):format(L(profile.name))) end
     if page == "wishlist" then
         if kind == "bis" then
             U.pageSub:SetText(L("Best in slot calculated by GearPilot with your profile (not an official list)"))
@@ -3097,13 +3172,6 @@ function GP.Render()
         showClutter(found, list.total)
     elseif kind == "route" then
         showRouteTask(found, profile, equipped)
-    elseif kind == "routezones" then
-        showHead("Interface\\Icons\\INV_Misc_Map_01", found.name or ("#" .. found.id), found.sub)
-        actions({ found.automatic and L("Use recommendation") or L("Quest in this zone"), function()
-            GP.settings.views.route = "route"
-            GP.QuestRoute.SetZone(found.id)
-            GP.Render()
-        end, 200 })
     elseif kind == "classquest" then
         showClassChain(found)
     elseif kind == "routepick" then
@@ -3158,6 +3226,7 @@ function GP.ReleaseCaches()
 end
 frame:SetScript("OnHide", function()
     U.profileMenu:Hide(); U.slotMenu:Hide(); GP.chainOpen = {}
+    U.routeHeader:HideAll()
     local at = (GetTime and GetTime()) or 0
     closedAt = at
     if C_Timer then
